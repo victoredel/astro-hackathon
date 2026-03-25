@@ -1,0 +1,54 @@
+version: "3.9"
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./checkpoints:/app/checkpoints
+      - .:/app
+    environment:
+      - DATABASE_URL=sqlite+aiosqlite:////app/data/solar.db
+      - API_BASE_URL=http://api:8000
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: python workers/ingest_daemon.py
+    depends_on:
+      api:
+        condition: service_healthy
+    volumes:
+      - .:/app
+    environment:
+      - DATABASE_URL=sqlite+aiosqlite:////app/data/solar.db
+      - API_BASE_URL=http://api:8000
+      - INGEST_INTERVAL_SECS=60
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: streamlit run dashboard/app.py --server.port 8501 --server.address 0.0.0.0
+    ports:
+      - "8501:8501"
+    depends_on:
+      - api
+    volumes:
+      - .:/app
+    environment:
+      - API_BASE_URL=http://api:8000
+
+volumes:
+  data:

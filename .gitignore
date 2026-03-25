@@ -1,0 +1,62 @@
+# ─── Python ──────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# ─── Virtual environments ─────────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+
+# ─── Environment / secrets ───────────────────────────────────────
+.env
+*.env
+.env.*
+
+# ─── Database ────────────────────────────────────────────────────
+data/
+*.db
+*.sqlite
+*.sqlite3
+
+# ─── ML checkpoints & model weights ─────────────────────────────
+checkpoints/
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+
+# ─── Jupyter ─────────────────────────────────────────────────────
+.ipynb_checkpoints/
+*.ipynb
+
+# ─── Testing & coverage ──────────────────────────────────────────
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+
+# ─── Linting / formatting ────────────────────────────────────────
+.ruff_cache/
+.mypy_cache/
+
+# ─── IDE / OS ────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.DS_Store
+Thumbs.db
+
+# ─── Docker volumes ──────────────────────────────────────────────
+docker-data/
+
+# ─── Logs ────────────────────────────────────────────────────────
+*.log
+logs/
