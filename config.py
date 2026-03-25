@@ -17,13 +17,19 @@ class Settings(BaseSettings):
     # NASA
     nasa_api_key: str = "DEMO_KEY"
 
+    # NASA DONKI
+    donki_base_url: str = "https://api.nasa.gov/DONKI"
+    donki_sync_interval_mins: int = 60   # how often to poll for new events
+    donki_lookback_days: int = 7         # how many days back per DONKI request
+
     # Database
     database_url: str = "sqlite+aiosqlite:///./data/solar.db"
 
-    # Prediction
+    # Prediction — decouple AI from ingestion
     prediction_horizon_mins: int = 30
-    sequence_len: int = 60  # number of 1-min samples for model input
+    sequence_len: int = 60
     ingest_interval_secs: int = 60
+    enable_ai_inference: bool = False   # ← set True when model is ready
 
     # API
     api_base_url: str = "http://localhost:8000"

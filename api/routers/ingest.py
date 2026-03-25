@@ -1,24 +1,35 @@
 """
-POST /ingest — Accepts validated SensorTelemetry, runs prediction, broadcasts via WS.
+POST /ingest — Accepts validated SensorTelemetry and persists it.
+
+Prediction is now DECOUPLED from ingestion via a config flag
+(`ENABLE_AI_INFERENCE`) and an optional query parameter (`run_inference`).
+
+This allows the daemon to bulk-insert telemetry without triggering
+the ML model on every record — useful during the data-collection phase.
 """
 from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
+from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, Query, status
+from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.ws_manager import manager
+from config import get_settings
 from db.database import get_session
 from db.models import PredictionRecord, TelemetryRecord
-from pipeline.predictor import predictor
 from schemas.prediction import StormPrediction
 from schemas.telemetry import SensorTelemetry, TelemetryBatch
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/ingest", tags=["ingest"])
+cfg = get_settings()
 
+
+# ── Persistence helpers ───────────────────────────────────────────────────────
 
 async def _persist_telemetry(rec: SensorTelemetry, session: AsyncSession) -> None:
     row = TelemetryRecord(
@@ -51,30 +62,16 @@ async def _persist_prediction(pred: StormPrediction, session: AsyncSession) -> N
     await session.commit()
 
 
-@router.post("", status_code=status.HTTP_201_CREATED, response_model=StormPrediction)
-async def ingest_single(
-    payload: SensorTelemetry,
-    session: AsyncSession = Depends(get_session),
-) -> StormPrediction:
-    """Ingest a single telemetry sample and return the resulting prediction."""
-    await _persist_telemetry(payload, session)
-
-    # Fetch recent records for sequence context
-    from sqlalchemy import select, desc
-    from config import get_settings
-    cfg = get_settings()
-
+async def _fetch_sequence(session: AsyncSession) -> list[SensorTelemetry]:
+    """Return the last `sequence_len` telemetry records in chronological order."""
     result = await session.execute(
         select(TelemetryRecord)
         .order_by(desc(TelemetryRecord.timestamp))
         .limit(cfg.sequence_len)
     )
     rows = result.scalars().all()
-
-    # Convert DB rows back to schema objects for predictor
-    records: list[SensorTelemetry] = []
-    for r in reversed(rows):  # chronological order
-        records.append(SensorTelemetry(
+    return [
+        SensorTelemetry(
             event_id=r.event_id,
             timestamp=r.timestamp,
             source=r.source,  # type: ignore[arg-type]
@@ -84,27 +81,95 @@ async def ingest_single(
             speed=r.speed,
             density=r.density,
             temperature=r.temperature,
-        ))
+        )
+        for r in reversed(rows)
+    ]
 
+
+def _should_run_inference(run_inference_param: bool | None) -> bool:
+    """
+    Decide whether AI inference runs.
+
+    Priority (highest → lowest):
+      1. Explicit `run_inference` query param, if provided
+      2. `ENABLE_AI_INFERENCE` setting from config / .env
+    """
+    if run_inference_param is not None:
+        return run_inference_param
+    return cfg.enable_ai_inference
+
+
+# ── Endpoints ─────────────────────────────────────────────────────────────────
+
+@router.post("", status_code=status.HTTP_201_CREATED)
+async def ingest_single(
+    payload: SensorTelemetry,
+    run_inference: Annotated[bool | None, Query(
+        description="Override ENABLE_AI_INFERENCE for this request. "
+                    "Pass false to skip AI and just persist telemetry."
+    )] = None,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """
+    Ingest a single telemetry sample.
+
+    - Always persists telemetry to `telemetry` table.
+    - Runs AI inference **only** if enabled (config or query param).
+    - Returns `{status, event_id}` when inference is off,
+      or the full StormPrediction payload when inference is on.
+    """
+    await _persist_telemetry(payload, session)
+
+    if not _should_run_inference(run_inference):
+        logger.debug("Inference skipped for event %s (flag disabled)", payload.event_id)
+        return {
+            "status": "persisted",
+            "event_id": str(payload.event_id),
+            "inference": "disabled",
+        }
+
+    # ── AI inference path ─────────────────────────────────────────────────────
+    from pipeline.predictor import predictor
+
+    records = await _fetch_sequence(session)
     pred = predictor.predict(records)
     await _persist_prediction(pred, session)
-
-    # Broadcast to all WebSocket clients
     await manager.broadcast(pred.model_dump(mode="json"))
 
-    return pred
+    return {
+        "status": "predicted",
+        "event_id": str(payload.event_id),
+        "inference": "enabled",
+        "prediction": pred.model_dump(mode="json"),
+    }
 
 
 @router.post("/batch", status_code=status.HTTP_201_CREATED)
 async def ingest_batch(
     payload: TelemetryBatch,
+    run_inference: Annotated[bool | None, Query(
+        description="Run inference after batch insert? Defaults to ENABLE_AI_INFERENCE setting."
+    )] = None,
     session: AsyncSession = Depends(get_session),
 ) -> dict:
-    """Ingest multiple telemetry records at once. Returns last prediction only."""
-    last_pred = None
+    """
+    Bulk-ingest telemetry records.
+
+    Persists all records first, then optionally runs a single inference
+    pass on the last sequence window. Efficient for historical back-fill.
+    """
     for rec in payload.records:
         await _persist_telemetry(rec, session)
-    last_pred = predictor.predict(payload.records)
-    await _persist_prediction(last_pred, session)
-    await manager.broadcast(last_pred.model_dump(mode="json"))
-    return {"ingested": len(payload.records), "prediction": last_pred.model_dump(mode="json")}
+
+    result: dict = {"ingested": len(payload.records), "inference": "disabled"}
+
+    if _should_run_inference(run_inference):
+        from pipeline.predictor import predictor
+        records = await _fetch_sequence(session)
+        pred = predictor.predict(records)
+        await _persist_prediction(pred, session)
+        await manager.broadcast(pred.model_dump(mode="json"))
+        result["inference"] = "enabled"
+        result["prediction"] = pred.model_dump(mode="json")
+
+    return result

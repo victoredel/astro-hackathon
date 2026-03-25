@@ -26,6 +26,9 @@ data/
 *.db
 *.sqlite
 *.sqlite3
+*.sqlite-wal
+*.sqlite-shm
+*.db-journal
 
 # ─── ML checkpoints & model weights ─────────────────────────────
 checkpoints/

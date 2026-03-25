@@ -15,9 +15,8 @@ AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False, class_=As
 
 
 async def init_db() -> None:
-    """Create all tables on startup."""
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    """Create all tables on startup. (Disabled—managed by Alembic now)"""
+    pass
 
 
 async def get_session() -> AsyncSession:  # type: ignore[misc]

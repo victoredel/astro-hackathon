@@ -1,16 +1,13 @@
 """
 FastAPI application entrypoint.
 
-Lifespan:
-  - Initialise SQLite DB tables
-  - Preload the ML model
-  - Register all routers
-
 Endpoints:
-  POST /ingest          — push telemetry + trigger prediction
+  POST /ingest          — push telemetry (inference optional via flag)
   POST /ingest/batch    — bulk ingestion
   GET  /predict/latest  — most recent prediction JSON
   GET  /predict/history — last N predictions
+  POST /donki/events    — upsert DONKI ground-truth event
+  GET  /donki/events    — list stored storm events
   GET  /health          — liveness check
   WS   /ws/realtime     — real-time prediction stream
 """
@@ -23,12 +20,13 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from api.routers import donki as donki_router
 from api.routers import ingest as ingest_router
 from api.routers import predict as predict_router
 from api.routers import telemetry as telemetry_router
 from api.routers import ws as ws_router
+from config import get_settings
 from db.database import init_db
-from pipeline.predictor import predictor
 
 logging.basicConfig(
     level=logging.INFO,
@@ -49,9 +47,14 @@ async def lifespan(app: FastAPI):
     await init_db()
     logger.info("✓ Database initialised")
 
-    # Preload ML model
-    predictor.load()
-    logger.info("✓ ML model ready")
+    # Preload ML model only if inference is enabled
+    cfg = get_settings()
+    if cfg.enable_ai_inference:
+        from pipeline.predictor import predictor
+        predictor.load()
+        logger.info("✓ ML model ready")
+    else:
+        logger.info("⏸  AI inference disabled (ENABLE_AI_INFERENCE=false) — model not loaded")
 
     yield  # ← app runs here
 
@@ -84,6 +87,7 @@ app.add_middleware(
 app.include_router(ingest_router.router)
 app.include_router(predict_router.router)
 app.include_router(telemetry_router.router)
+app.include_router(donki_router.router)
 app.include_router(ws_router.router)
 
 
