@@ -221,18 +221,18 @@ with st.sidebar:
     st.markdown("- SolarTransformer (6L/8H/512d)\n- LoRA fine-tuning (r=16)\n- WGAN-GP augmentation")
     st.divider()
     if st.button("🔴 Simulate CRITICAL Storm"):
+        record = {
+            "timestamp": datetime.now(tz=timezone.utc).isoformat(),
+            "source": "DSCOVR",
+            "bx_gse": 3.2,
+            "by_gse": -5.1,
+            "bz_gse": -52.0,  # extreme southward Bz
+            "speed": 950.0,   # very high speed
+            "density": 28.5,
+            "temperature": 250000.0,
+        }
         try:
-            payload = {
-                "timestamp": datetime.now(tz=timezone.utc).isoformat(),
-                "source": "DSCOVR",
-                "bx_gse": 3.2,
-                "by_gse": -5.1,
-                "bz_gse": -52.0,  # extreme southward Bz
-                "speed": 950.0,   # very high speed
-                "density": 28.5,
-                "temperature": 250000.0,
-            }
-            r = httpx.post(f"{API_BASE}/ingest", json=payload, timeout=8.0)
+            r = httpx.post(f"{API_BASE}/ingest", json=record, timeout=8.0)
             if r.status_code == 201:
                 st.success("Storm injected! ⚡")
                 st.cache_data.clear()
@@ -242,18 +242,18 @@ with st.sidebar:
             st.error(f"Could not reach API: {e}")
 
     if st.button("🟢 Simulate QUIET Period"):
+        record = {
+            "timestamp": datetime.now(tz=timezone.utc).isoformat(),
+            "source": "DSCOVR",
+            "bx_gse": 0.5,
+            "by_gse": 1.2,
+            "bz_gse": 3.0,   # northward Bz — quiet
+            "speed": 380.0,
+            "density": 4.2,
+            "temperature": 90000.0,
+        }
         try:
-            payload = {
-                "timestamp": datetime.now(tz=timezone.utc).isoformat(),
-                "source": "DSCOVR",
-                "bx_gse": 0.5,
-                "by_gse": 1.2,
-                "bz_gse": 3.0,   # northward Bz — quiet
-                "speed": 380.0,
-                "density": 4.2,
-                "temperature": 90000.0,
-            }
-            r = httpx.post(f"{API_BASE}/ingest", json=payload, timeout=8.0)
+            r = httpx.post(f"{API_BASE}/ingest", json=record, timeout=8.0)
             if r.status_code == 201:
                 st.success("Quiet period simulated 🌙")
                 st.cache_data.clear()
@@ -314,60 +314,40 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# ── CRITICAL flash effect ──────────────────────────────────────────────────────
-if alert == "CRITICAL":
-    st.markdown("""
-    <style>
-    @keyframes blink-border {
-        0%, 100% { box-shadow: 0 0 0px rgba(255,23,68,0); }
-        50%       { box-shadow: 0 0 32px 6px rgba(255,23,68,0.55); }
-    }
-    .metric-card, [data-testid="metric-container"] {
-        animation: blink-border 1.2s ease-in-out infinite !important;
-    }
-    .solar-header {
-        border-color: rgba(255,23,68,0.6) !important;
-        animation: blink-border 1.2s ease-in-out infinite !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
 st.markdown("<br>", unsafe_allow_html=True)
 
 # ╔══════════════════════════════════════════════════════════════════════════════╗
 # ║  ROW 1 — THE VERDICT                                                        ║
 # ╚══════════════════════════════════════════════════════════════════════════════╝
-col_gauge, col_insights = st.columns([2, 3])
+col_gauge, col_insights = st.columns([1, 1])
 
 with col_gauge:
     from dashboard.components.gauge import build_gauge
     st.plotly_chart(build_gauge(prob, alert, conf), use_container_width=True, config={"displayModeBar": False})
 
 with col_insights:
-    driver_icon = "🔴" if alert == "CRITICAL" else ("🟡" if alert == "WARNING" else "🟢")
-    st.markdown(f"""
-    <div class="metric-card" style="margin-bottom:16px;text-align:left;">
-        <div class="section-label">🧠 Model Insights</div>
-        <div style="font-size:1.15rem;font-weight:600;color:#e0e8ff;margin-top:6px;">
-            {driver_icon} {primary_driver}
-        </div>
-        <div style="color:#8892a4;font-size:0.78rem;margin-top:8px;">
-            Heuristic XAI · Based on latest L1 telemetry reading
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-    m1, m2 = st.columns(2)
-    with m1:
-        st.metric(
-            label="🧲 Est. Kp Index",
-            value=f"{kp:.1f}" if kp is not None else "—",
-            help="Estimated planetary K-index (0=quiet, 9=extreme storm)",
-        )
-    with m2:
-        st.metric(
-            label="⏱ Forecast Window",
-            value=f"+{horizon} min",
-        )
+    # Add vertical spacing to align with the visual center of the Plotly gauge
+    st.markdown("<br><br>", unsafe_allow_html=True)
+    
+    st.markdown('<p class="section-label">🧠 Model Insights</p>', unsafe_allow_html=True)
+    driver_text = f"**{primary_driver}**\n\n*Heuristic XAI · Based on latest L1 telemetry reading*"
+    if alert == "CRITICAL":
+        st.error(driver_text, icon="🔴")
+    elif alert == "WARNING":
+        st.warning(driver_text, icon="🟡")
+    else:
+        st.info(driver_text, icon="🟢")
+        
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.metric(
+        label="🧲 Est. Kp Index",
+        value=f"{kp:.1f}" if kp is not None else "—",
+        help="Estimated planetary K-index (0=quiet, 9=extreme storm)",
+    )
+    st.metric(
+        label="⏱ Forecast Window",
+        value=f"+{horizon} min",
+    )
 
 st.divider()
 
