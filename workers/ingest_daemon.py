@@ -128,7 +128,11 @@ async def _fetch_noaa_source(
 
     mag_data: list[dict] = mag_resp.json()
     plasma_data: list[dict] = plasma_resp.json()
-    return _latest_valid(mag_data, "bz_gsm"), _latest_valid(plasma_data, "speed")
+    
+    # Check for the new NOAA field 'proton_speed', fallback to old 'speed'
+    plasma_row = _latest_valid(plasma_data, "proton_speed") or _latest_valid(plasma_data, "speed")
+    
+    return _latest_valid(mag_data, "bz_gsm"), plasma_row
 
 
 async def _fetch_ace_source(

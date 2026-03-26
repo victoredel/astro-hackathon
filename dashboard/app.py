@@ -8,6 +8,7 @@ parameters, heatmaps, and an uncertainty cone chart.
 """
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -140,7 +141,7 @@ div[data-testid="stMetricValue"] {
 """, unsafe_allow_html=True)
 
 # ── Configuration ──────────────────────────────────────────────────────────────
-API_BASE = "http://localhost:8000"
+API_BASE = os.getenv("API_BASE_URL", "http://localhost:8000")
 REFRESH_SECS = 5
 HISTORY_LIMIT = 120  # last 2 hours of predictions
 

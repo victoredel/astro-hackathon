@@ -58,6 +58,20 @@ def build_timeseries(df: pd.DataFrame) -> go.Figure:
         fillcolor="rgba(171,71,188,0.08)",
     ), row=3, col=1)
 
+    # ── Dynamic Y-axis bounds ───────────────────────────────────────────────────
+    bz_min = min(df["bz_gse"].min() - 5, -15)
+    bz_max = max(df["bz_gse"].max() + 5, 15)
+
+    speed_min = min(df["speed"].min() - 20, 300)
+    speed_max = max(df["speed"].max() + 20, 700)
+
+    density_min = 0
+    density_max = max(df["density"].max() + 5, 20)
+
+    fig.update_yaxes(range=[bz_min, bz_max], row=1, col=1)
+    fig.update_yaxes(range=[speed_min, speed_max], row=2, col=1)
+    fig.update_yaxes(range=[density_min, density_max], row=3, col=1)
+
     fig.update_layout(
         paper_bgcolor="rgba(13,17,35,0)",
         plot_bgcolor="rgba(255,255,255,0.03)",
@@ -68,8 +82,10 @@ def build_timeseries(df: pd.DataFrame) -> go.Figure:
         hovermode="x unified",
     )
     fig.update_xaxes(
-        gridcolor="rgba(255,255,255,0.05)",
+        tickformat="%H:%M",
+        nticks=8,
         showgrid=True,
+        gridcolor="rgba(255,255,255,0.05)",
         zeroline=False,
     )
     fig.update_yaxes(
