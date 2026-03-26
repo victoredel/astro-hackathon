@@ -2,6 +2,7 @@ version: "3.9"
 
 services:
   api:
+    image: astro-hackathon-app
     build:
       context: .
       dockerfile: Dockerfile
@@ -22,6 +23,7 @@ services:
       retries: 3
 
   worker:
+    image: astro-hackathon-app
     build:
       context: .
       dockerfile: Dockerfile
@@ -37,6 +39,7 @@ services:
       - INGEST_INTERVAL_SECS=60
 
   dashboard:
+    image: astro-hackathon-app
     build:
       context: .
       dockerfile: Dockerfile
