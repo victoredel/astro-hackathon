@@ -40,7 +40,7 @@ settings = get_settings()
 # ── NOAA SWPC endpoint URLs ────────────────────────────────────────────────────
 # DSCOVR (primary)
 DSCOVR_MAG_URL = f"{settings.noaa_base_url}/rtsw_mag_1m.json"
-DSCOVR_PLASMA_URL = f"{settings.noaa_base_url}/rtsw_plasma_1m.json"
+DSCOVR_PLASMA_URL = f"{settings.noaa_base_url}/rtsw_wind_1m.json"
 
 # ACE (fallback) — NOAA hosts ACE data in the same format family
 ACE_MAG_URL = "https://services.swpc.noaa.gov/json/ace/mag/ace_mag_1m.json"
@@ -192,9 +192,9 @@ async def fetch_and_ingest(client: httpx.AsyncClient) -> None:
             bx_gse=float(mag_row.get("bx_gsm") or 0.0),
             by_gse=float(mag_row.get("by_gsm") or 0.0),
             bz_gse=float(mag_row.get("bz_gsm") or 0.0),
-            speed=float(plasma_row.get("speed") or 400.0),
-            density=float(plasma_row.get("density") or 5.0),
-            temperature=float(plasma_row.get("temperature") or 100_000.0),
+            speed=float(plasma_row.get("speed") or plasma_row.get("proton_speed") or 400.0),
+            density=float(plasma_row.get("density") or plasma_row.get("proton_density") or 5.0),
+            temperature=float(plasma_row.get("temperature") or plasma_row.get("proton_temperature") or 100_000.0),
         )
     except Exception as exc:  # noqa: BLE001
         logger.error("Validation error building SensorTelemetry: %s", exc)
