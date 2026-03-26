@@ -38,6 +38,7 @@ class StormPrediction(BaseModel):
     # Optional extras for the dashboard
     kp_index_estimate: float | None = Field(default=None, description="Estimated Kp index (0–9)")
     horizon_minutes: int = Field(default=30, description="Prediction horizon in minutes")
+    primary_driver: str | None = Field(default=None, description="Human-readable XAI explanation of the dominant factor")
 
     @field_validator("alert_level", mode="before")
     @classmethod

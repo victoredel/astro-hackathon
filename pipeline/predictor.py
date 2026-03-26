@@ -29,6 +29,20 @@ def _alert_from_prob(p: float) -> AlertLevel:
     return AlertLevel.NORMAL
 
 
+def _get_primary_driver(records: list) -> str:
+    """Heuristic XAI: return a human-readable explanation of the dominant driver."""
+    if not records:
+        return "Stable solar wind parameters."
+    latest = records[-1]
+    if latest.bz_gse < -10:
+        return "Strong southward magnetic field (Bz) detected."
+    if latest.speed > 600:
+        return "Sudden spike in solar wind speed."
+    if latest.density > 20:
+        return "High density plasma cloud detected."
+    return "Stable solar wind parameters."
+
+
 class Predictor:
     """Thread-safe inference wrapper around the loaded model."""
 
@@ -91,6 +105,7 @@ class Predictor:
             alert_level=_alert_from_prob(prob),
             kp_index_estimate=round(kp, 2) if kp is not None else None,
             horizon_minutes=horizon,
+            primary_driver=_get_primary_driver(records),
         )
 
     @staticmethod
@@ -122,6 +137,7 @@ class Predictor:
             confidence_score=round(conf, 4),
             alert_level=_alert_from_prob(prob),
             horizon_minutes=horizon,
+            primary_driver=_get_primary_driver(records),
         )
 
 
