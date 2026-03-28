@@ -1,104 +1,149 @@
 import streamlit as st
-import plotly.graph_objects as go
+import pydeck as pdk
+import pandas as pd
+import requests
+import math
+import time
+from datetime import datetime, timedelta
+from sgp4.api import Satrec, WGS72
 
-# Configuración de página (debe ser lo primero)
 st.set_page_config(page_title="Yörünge Kontrol", page_icon="🛰️", layout="wide")
 
-st.title("🛰️ TUA Yörünge ve Uzay Çöpü Kontrol Merkezi")
-st.markdown("Güneş fırtınası kaynaklı atmosferik genleşmenin (Termosferik Isınma) uzay çöpleri ve aktif uydular üzerindeki 'Orbital Decay' (Yörünge Alçalması) etkisini simüle eder.")
-
+st.title("🛰️ TUA Küresel Uzay Çöpü ve Aktif Uydu Monitörü (CANLI)")
+st.markdown("Dünya yörüngesindeki nesnelerin WebGL destekli canlı hareketi.")
 st.markdown("---")
 
-# Simulador de entrada de la IA (Para la demo en esta página independiente)
+# 1. Cargar TLEs una sola vez en memoria (Cache global de recursos)
+@st.cache_resource(ttl=3600)
+def fetch_tles():
+    urls = {
+        "active": "https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=tle",
+        "debris": "https://celestrak.org/NORAD/elements/gp.php?GROUP=cosmos-2251-debris&FORMAT=tle"
+    }
+    
+    satrecs_active = []
+    satrecs_debris = []
+    
+    for category, url in urls.items():
+        try:
+            response = requests.get(url, timeout=10)
+            lines = response.text.strip().split('\n')
+            limit = 400 * 3 # Limitamos a 400 de cada uno para fluidez
+            for i in range(0, min(len(lines), limit), 3):
+                if i+2 < len(lines):
+                    sat = Satrec.twoline2rv(lines[i+1].strip(), lines[i+2].strip())
+                    if category == "active":
+                        satrecs_active.append(sat)
+                    else:
+                        satrecs_debris.append(sat)
+        except Exception as e:
+            pass
+    return satrecs_active, satrecs_debris
+
+with st.spinner("📡 TLE verileri indiriliyor..."):
+    satrecs_active, satrecs_debris = fetch_tles()
+
+# 2. Función para calcular posiciones en un momento dado
+def calculate_positions(satrecs, current_time):
+    jd, fr = current_time.toordinal() + 1721424.5, current_time.hour / 24.0 + current_time.minute / 1440.0 + current_time.second / 86400.0
+    
+    d = jd - 2451545.0 + fr
+    gmst = (18.697374558 + 24.06570982441908 * d) % 24
+    gmst_rad = gmst * 15 * math.pi / 180.0
+
+    lats, lons = [], []
+    for sat in satrecs:
+        e, r, v = sat.sgp4(jd, fr)
+        if e == 0:
+            x, y, z = r
+            r_norm = math.sqrt(x**2 + y**2 + z**2)
+            lat = math.degrees(math.asin(z / r_norm))
+            lon = math.degrees(math.atan2(y, x) - gmst_rad)
+            lon = (lon + 180) % 360 - 180
+            lats.append(lat)
+            lons.append(lon)
+    return pd.DataFrame({"lat": lats, "lon": lons})
+
+# 3. Interfaz de Control
 st.sidebar.header("🌞 Uzay Havası (Space Weather)")
-st.sidebar.caption("Surya AI modelinin anlık fırtına olasılığını simüle edin:")
 storm_prob = st.sidebar.slider("Güneş Fırtınası Olasılığı (%)", 0, 100, 25)
-
-# Lógica de Colisión (Conciencia Situacional Espacial)
 is_danger = storm_prob > 75
-imece_lat, imece_lon = 39.0, 35.0 # Posición base sobre Turquía
+deb_color = [255, 75, 75, 200] if is_danger else [255, 152, 0, 200]
 
-if is_danger:
-    # La tormenta frena la basura espacial, haciendo que su órbita decaiga y se cruce con İMECE
-    debris_lat, debris_lon = 39.5, 35.5 
-    distance = 120 # metros
-    status_color = "#FF4B4B" # Rojo
-    line_color = "red"
-else:
-    # Órbita normal y segura
-    debris_lat, debris_lon = 45.0, 50.0 
-    distance = 54000 # metros
-    status_color = "#4CAF50" # Verde
-    line_color = "rgba(255, 255, 255, 0.2)" # Blanco transparente
+# 4. El bucle de animación (Real-time render)
+col_map, col_alerts = st.columns([3, 1])
 
-col_map, col_alerts = st.columns([2.5, 1])
-
-with col_map:
-    fig = go.Figure()
-
-    # 1. Trazado del Satélite İMECE (Verde/Cian)
-    fig.add_trace(go.Scattergeo(
-        lon=[imece_lon], lat=[imece_lat],
-        mode='markers+text', text=["İMECE Uydusu"], textposition="bottom center",
-        textfont=dict(color="cyan", size=12),
-        marker=dict(size=12, color='cyan', symbol='square'),
-        name="Aktif Uydu"
-    ))
-
-    # 2. Trazado de la Basura Espacial (Cambia de color según peligro)
-    fig.add_trace(go.Scattergeo(
-        lon=[debris_lon], lat=[debris_lat],
-        mode='markers+text', text=["KOSMOS Enkazı (Debris)"], textposition="top center",
-        textfont=dict(color=status_color, size=12),
-        marker=dict(size=10, color=status_color, symbol='circle'),
-        name="Uzay Çöpü"
-    ))
-    
-    # 3. Estela/Línea de trayectoria visual
-    fig.add_trace(go.Scattergeo(
-        lon=[imece_lon, debris_lon], lat=[imece_lat, debris_lat],
-        mode='lines',
-        line=dict(width=2, color=line_color, dash='dot'),
-        name="Yaklaşma Vektörü"
-    ))
-
-    # Configuración del Globo 3D
-    fig.update_layout(
-        geo=dict(
-            projection_type='orthographic', # Esto crea la esfera 3D giratoria
-            showcoastlines=True, coastlinecolor="rgba(255, 255, 255, 0.3)",
-            showland=True, landcolor="#0e1117",
-            showocean=True, oceancolor="#000000",
-            showlakes=False,
-            showcountries=True, countrycolor="rgba(255, 255, 255, 0.1)",
-            bgcolor="black"
-        ),
-        paper_bgcolor="#0e1117",
-        plot_bgcolor="#0e1117",
-        margin=dict(l=0, r=0, t=0, b=0),
-        height=600,
-        showlegend=False
-    )
-    
-    st.plotly_chart(fig, use_container_width=True)
+# st.empty() es el contenedor que vamos a actualizar constantemente
+map_placeholder = col_map.empty()
 
 with col_alerts:
-    st.subheader("🚨 Çarpışma Uyarı Paneli")
-    st.caption("Uzay Çöpleri Takip ve Çarpışma Önleme Sistemi")
+    st.subheader("📊 Canlı İstatistikler")
+    st.metric("Aktif Uydular", len(satrecs_active))
+    st.metric("İzlenen Enkaz", len(satrecs_debris))
     
     if is_danger:
-        st.error("⚠️ **KRİTİK UYARI: YÖRÜNGE KESİŞİMİ**")
-        st.markdown(f"""
-        **Tehdit:** KOSMOS-2251 Enkazı
-        **Hedef:** İMECE Gözlem Uydusu
-        **Yaklaşma Mesafesi:** `{distance} m`
-        """)
-        st.warning("""
-        **Neden:** Güneş fırtınası (Olasılık > %75) termosferi ısıtarak atmosferik yoğunluğu artırdı. Enkazın yörüngesi beklenenden hızlı alçaldı (Orbital Decay).
-        """)
-        st.info("⚡ **OTOMATİK EMİR:** İMECE uydusu için Delta-V kaçınma manevrası (Collision Avoidance Burn) hesaplanıyor...")
+         st.error("🚨 **KRİTİK UYARI**: Atmosferik Drag yüksek.")
     else:
-        st.success("✅ **YÖRÜNGE GÜVENLİ**")
-        st.write("Aktif uydular ve izlenen uzay çöpleri arasında kritik bir kesişim yok.")
-        st.metric("En Yakın Enkaz Mesafesi", f"{distance / 1000} km")
-        st.info("Termosferik yoğunluk normal seviyelerde. Yörünge sapması (Drag) minimum.")
+         st.success("✅ Yörünge Güvenli.")
+
+# Bucle infinito para actualizar las coordenadas y redibujar el mapa PyDeck
+# NOTA: En un hackathon, este bucle simple impresiona mucho.
+time_offset = 0 # Segundos simulados hacia el futuro
+while True:
+    # Aceleramos el tiempo (ej. 1 segundo real = 30 segundos orbitales) para que el movimiento sea evidente
+    simulated_time = datetime.utcnow() + timedelta(seconds=time_offset)
+    
+    df_active = calculate_positions(satrecs_active, simulated_time)
+    df_debris = calculate_positions(satrecs_debris, simulated_time)
+    
+    # Capa de PyDeck para Satélites
+    layer_active = pdk.Layer(
+        "ScatterplotLayer",
+        df_active,
+        get_position="[lon, lat]",
+        get_color=[0, 255, 204, 200], # Cyan
+        get_radius=10000, # Reducido a 10km
+        radius_min_pixels=1, # Evita que desaparezcan al alejar
+        radius_max_pixels=3, # Evita que se vuelvan manchas al acercar
+        pickable=True
+    )
+
+    # Capa de PyDeck para Basura
+    layer_debris = pdk.Layer(
+        "ScatterplotLayer",
+        df_debris,
+        get_position="[lon, lat]",
+        get_color=deb_color,
+        get_radius=15000, # Reducido a 15km
+        radius_min_pixels=1.5,
+        radius_max_pixels=4,
+        pickable=True
+    )
+
+    # Vista Inicial centrada en Turquía
+    view_state = pdk.ViewState(
+        latitude=39.0,
+        longitude=35.0,
+        zoom=1, # Reducimos un poco el zoom para ver mejor la curvatura
+        pitch=45,
+    )
+
+    # Activamos explícitamente el motor de Globo 3D
+    globe_view = pdk.View(type="_GlobeView", controller=True)
+
+    # Renderizador con la vista esférica activada
+    r = pdk.Deck(
+        layers=[layer_active, layer_debris],
+        initial_view_state=view_state,
+        views=[globe_view],   # <-- ¡Esto convierte el mapa plano en una esfera 3D!
+        map_provider="carto", 
+        map_style="dark",     
+        tooltip={"text": "Koordinat: {lat}, {lon}"}
+    )
+
+    # Actualizamos el contenedor vacío con el nuevo mapa
+    map_placeholder.pydeck_chart(r)
+    
+    # Avanzamos el reloj de simulación y hacemos una pausa para no quemar la CPU
+    time_offset += 60 # Avanza 1 minuto orbital por cada iteración del bucle
+    time.sleep(1) # Actualiza el mapa cada 1 segundo real
