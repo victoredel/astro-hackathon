@@ -18,7 +18,9 @@ stays frozen to prevent OOM on commodity hardware.
 """
 from __future__ import annotations
 
+import importlib.util
 import logging
+import sys
 from typing import Optional
 
 import torch
@@ -81,7 +83,6 @@ class SuryaTimeSeriesAdapter(nn.Module):
         logger.info("Downloading and loading IBM/NASA Prithvi-EO-1.0-100M manually...")
         try:
             from huggingface_hub import hf_hub_download
-            import importlib.util
 
             # Download official NASA source + weights
             model_def_path = hf_hub_download(
