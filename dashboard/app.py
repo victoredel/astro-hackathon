@@ -431,6 +431,8 @@ if st.session_state.ldpc_sim_result:
         else:
             st.warning(f"⚠️ **KISMİ KAYIP:** Fırtına çok şiddetliydi, ancak LDPC algoritması **{result['corrupted_bits']} hatalı bitin** büyük kısmını onarmayı başardı.")
 
+import streamlit.components.v1 as components
+
 # ── TEİAŞ GIC Risk Engine ──────────────────────────────────────────────────────
 st.markdown("---")
 st.subheader("⚡ TEİAŞ Kritik Altyapı Koruma (Terrestrial GIC Risk Engine)")
@@ -449,58 +451,53 @@ with col_data:
 with col_anim:
     if storm_severe:
         st.error("🚨 **KRİTİK UYARI:** Şebeke ayırma protokolü devrede. (Protocolo de Desconexión)")
-        # Animación SVG de Desconexión (El enchufe se mueve a la derecha y se pone rojo)
-        svg_animation = '''
-        <div style="display: flex; justify-content: center; align-items: center; padding: 20px; background-color: #1E1E1E; border-radius: 10px; border: 2px solid #FF4B4B;">
-            <svg width="350" height="120" viewBox="0 0 350 120">
-                <rect x="20" y="20" width="60" height="80" rx="8" fill="#333" stroke="#555" stroke-width="2"/>
-                <rect x="40" y="40" width="12" height="8" rx="2" fill="#111"/>
-                <rect x="40" y="70" width="12" height="8" rx="2" fill="#111"/>
-                
-                <g>
-                    <animateTransform attributeName="transform" type="translate" values="0,0; 100,0" begin="0.2s" dur="0.6s" fill="freeze" calcMode="spline" keySplines="0.25 0.1 0.25 1"/>
-                    
-                    <rect x="35" y="41" width="20" height="6" rx="1" fill="#ddd"/>
-                    <rect x="35" y="71" width="20" height="6" rx="1" fill="#ddd"/>
-                    
-                    <rect x="55" y="30" width="50" height="60" rx="10" fill="#4CAF50">
-                        <animate attributeName="fill" values="#4CAF50;#FF4B4B" begin="0.4s" dur="0.2s" fill="freeze"/>
-                    </rect>
-                    
-                    <path d="M 105 60 C 150 60, 180 90, 250 90" fill="none" stroke="#222" stroke-width="12" stroke-linecap="round"/>
-                </g>
-                
-                <g opacity="0">
-                    <animate attributeName="opacity" values="0;1;0;1;0" begin="0.8s" dur="1s" repeatCount="indefinite"/>
-                    <circle cx="50" cy="44" r="4" fill="#FFD700"/>
-                    <circle cx="50" cy="74" r="4" fill="#FFD700"/>
-                    <path d="M 45 35 L 55 25 L 50 40 Z" fill="#FFD700"/>
-                </g>
-            </svg>
-        </div>
-        '''
+        
+        # SVG sin espacios a la izquierda para evitar el bug de Markdown
+        svg_animation = """
+<div style="display: flex; justify-content: center; align-items: center; padding: 20px; background-color: #1E1E1E; border-radius: 10px; border: 2px solid #FF4B4B;">
+    <svg width="350" height="120" viewBox="0 0 350 120">
+        <rect x="20" y="20" width="60" height="80" rx="8" fill="#333" stroke="#555" stroke-width="2"/>
+        <rect x="40" y="40" width="12" height="8" rx="2" fill="#111"/>
+        <rect x="40" y="70" width="12" height="8" rx="2" fill="#111"/>
+        <g>
+            <animateTransform attributeName="transform" type="translate" values="0,0; 100,0" begin="0.2s" dur="0.6s" fill="freeze" calcMode="spline" keySplines="0.25 0.1 0.25 1"/>
+            <rect x="35" y="41" width="20" height="6" rx="1" fill="#ddd"/>
+            <rect x="35" y="71" width="20" height="6" rx="1" fill="#ddd"/>
+            <rect x="55" y="30" width="50" height="60" rx="10" fill="#4CAF50">
+                <animate attributeName="fill" values="#4CAF50;#FF4B4B" begin="0.4s" dur="0.2s" fill="freeze"/>
+            </rect>
+            <path d="M 105 60 C 150 60, 180 90, 250 90" fill="none" stroke="#222" stroke-width="12" stroke-linecap="round"/>
+        </g>
+        <g opacity="0">
+            <animate attributeName="opacity" values="0;1;0;1;0" begin="0.8s" dur="1s" repeatCount="indefinite"/>
+            <circle cx="50" cy="44" r="4" fill="#FFD700"/>
+            <circle cx="50" cy="74" r="4" fill="#FFD700"/>
+            <path d="M 45 35 L 55 25 L 50 40 Z" fill="#FFD700"/>
+        </g>
+    </svg>
+</div>
+"""
         st.markdown(svg_animation, unsafe_allow_html=True)
         st.info("⚡ Akkuyu ve Atatürk trafoları fiziksel olarak şebekeden ayrıldı.")
         
     else:
         st.success("✅ **DURUM NORMAL:** Şebeke bağlı ve operasyonel.")
-        # SVG Estático Conectado (Verde)
-        svg_connected = '''
-        <div style="display: flex; justify-content: center; align-items: center; padding: 20px; background-color: #1E1E1E; border-radius: 10px; border: 2px solid #4CAF50;">
-            <svg width="350" height="120" viewBox="0 0 350 120">
-                <rect x="20" y="20" width="60" height="80" rx="8" fill="#333" stroke="#555" stroke-width="2"/>
-                <rect x="40" y="40" width="12" height="8" rx="2" fill="#111"/>
-                <rect x="40" y="70" width="12" height="8" rx="2" fill="#111"/>
-                
-                <g transform="translate(0,0)">
-                    <rect x="35" y="41" width="20" height="6" rx="1" fill="#ddd"/>
-                    <rect x="35" y="71" width="20" height="6" rx="1" fill="#ddd"/>
-                    <rect x="55" y="30" width="50" height="60" rx="10" fill="#4CAF50"/>
-                    <path d="M 105 60 C 150 60, 180 90, 250 90" fill="none" stroke="#222" stroke-width="12" stroke-linecap="round"/>
-                </g>
-            </svg>
-        </div>
-        '''
+        
+        svg_connected = """
+<div style="display: flex; justify-content: center; align-items: center; padding: 20px; background-color: #1E1E1E; border-radius: 10px; border: 2px solid #4CAF50;">
+    <svg width="350" height="120" viewBox="0 0 350 120">
+        <rect x="20" y="20" width="60" height="80" rx="8" fill="#333" stroke="#555" stroke-width="2"/>
+        <rect x="40" y="40" width="12" height="8" rx="2" fill="#111"/>
+        <rect x="40" y="70" width="12" height="8" rx="2" fill="#111"/>
+        <g transform="translate(0,0)">
+            <rect x="35" y="41" width="20" height="6" rx="1" fill="#ddd"/>
+            <rect x="35" y="71" width="20" height="6" rx="1" fill="#ddd"/>
+            <rect x="55" y="30" width="50" height="60" rx="10" fill="#4CAF50"/>
+            <path d="M 105 60 C 150 60, 180 90, 250 90" fill="none" stroke="#222" stroke-width="12" stroke-linecap="round"/>
+        </g>
+    </svg>
+</div>
+"""
         st.markdown(svg_connected, unsafe_allow_html=True)
 
 st.divider()
