@@ -502,6 +502,28 @@ with col_anim:
 
 st.divider()
 
+# ── TUA Yörünge ve Uzay Çöpü Kontrol Merkezi ──────────────────────────────────
+st.subheader("🛰️ TUA Yörünge ve Uzay Çöpü Kontrol Merkezi")
+st.caption("Uzay çöpleri (Space Debris) takip ve çarpışma önleme simülatörü. Fırtına kaynaklı atmosferik sürüklenme (Drag) etkilerini 3 boyutlu küre üzerinde analiz edin.")
+
+# Un mensaje llamativo y un botón que redirige a la otra página
+col_info, col_btn = st.columns([3, 1])
+with col_info:
+    st.info("💡 **YENİ MODÜL:** İMECE uydusu ve uzay çöpleri arasındaki yörünge kesişimlerini canlı 3D haritada izlemek için Kontrol Merkezine geçiş yapın.")
+with col_btn:
+    # Botón HTML puro inyectado en Markdown. Es infalible.
+    # El href apunta al nombre del archivo de la página (sin el .py)
+    html_button = '''
+    <a href="1_Yorunge_Kontrol" target="_self" style="text-decoration: none;">
+        <div style="background-color: #2b2b36; border: 2px solid #4CAF50; padding: 12px; border-radius: 8px; text-align: center; color: white; font-weight: bold; transition: 0.3s; cursor: pointer;">
+            🚀 Kontrol Merkezini Aç
+        </div>
+    </a>
+    '''
+    st.markdown(html_button, unsafe_allow_html=True)
+
+st.divider()
+
 # ╔══════════════════════════════════════════════════════════════════════════════╗
 # ║  ROW 2 — THE FORECAST (Cone left · Heatmap right)                           ║
 # ╚══════════════════════════════════════════════════════════════════════════════╝
