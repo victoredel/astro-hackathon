@@ -93,16 +93,32 @@ class Predictor:
         with torch.no_grad():
             out = self._model.predict(tensor)
 
-        prob = float(out["storm_probability"])
+        ai_prob = float(out["storm_probability"])
         conf = float(out["confidence_score"])
         kp = out.get("kp_index_estimate")
+
+        # Get heuristic fallback for weighted average
+        heuristic_prob = self._heuristic_predict(records, target_ts, horizon).storm_probability
+
+        # Extract RAW (unnormalized) values from the most recent record (T-0)
+        # Accessing object attributes instead of list indices to avoid TypeError
+        current_bz = records[-1].bz_gse
+        current_speed = records[-1].speed
+
+        # Combine AI and heuristic (weighted average)
+        final_prob = (0.7 * ai_prob) + (0.3 * heuristic_prob)
+
+        # Space Weather Absolute Safety Override:
+        # Evaluated on RAW physics, not AI logits or normalized tensors.
+        if current_bz >= 0.0 and current_speed < 450.0:
+            final_prob = min(final_prob, 0.12)
 
         return StormPrediction(
             generated_at=now,
             target_timestamp=target_ts,
-            storm_probability=round(prob, 4),
+            storm_probability=round(final_prob, 4),
             confidence_score=round(conf, 4),
-            alert_level=_alert_from_prob(prob),
+            alert_level=_alert_from_prob(final_prob),
             kp_index_estimate=round(kp, 2) if kp is not None else None,
             horizon_minutes=horizon,
             primary_driver=_get_primary_driver(records),
