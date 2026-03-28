@@ -29,13 +29,19 @@ def load_model(use_real_surya: bool = False, checkpoint: str | None = None):
 
     if use_real_surya:
         try:
-            from transformers import AutoModel
-            logger.info("Loading IBM/NASA Surya from HuggingFace Hub...")
-            model = AutoModel.from_pretrained("ibm-nasa-geospatial/Prithvi-EO-1.0", trust_remote_code=True)
-            logger.info("Surya loaded successfully")
-            return model.to(device).eval()
+            from models.surya_adapter import SuryaTimeSeriesAdapter
+            logger.info("Instantiating SuryaTimeSeriesAdapter (Prithvi backbone + trainable heads)...")
+            adapter = SuryaTimeSeriesAdapter(n_features=7)  # uses ibm-nasa-geospatial/Prithvi-EO-1.0-100M
+            logger.info(
+                "Adapter ready — backbone real=%s | trainable params=%d",
+                adapter.backbone_is_real_prithvi(),
+                sum(p.numel() for p in adapter.trainable_parameters()),
+            )
+            return adapter.to(device).eval()
         except Exception as exc:  # noqa: BLE001
-            logger.warning("Surya unavailable (%s). Falling back to SolarTransformer surrogate.", exc)
+            logger.warning(
+                "SuryaTimeSeriesAdapter unavailable (%s). Falling back to SolarTransformer surrogate.", exc
+            )
 
     base = SolarTransformer(
         n_features=7,

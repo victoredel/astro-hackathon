@@ -1,5 +1,9 @@
 """
-Training script — LoRA fine-tuning of SolarTransformer on labelled event data.
+Training script — supports two model modes:
+
+  surrogate  (default)  Fine-tunes SolarTransformer with LoRA.
+  surya                 Trains only the adapter layers of SuryaTimeSeriesAdapter
+                        (Prithvi backbone stays frozen — prevents OOM).
 
 Data sources:
   - DONKI API (NASA) for historical CME / geomagnetic storm labels
@@ -8,8 +12,15 @@ Data sources:
 
 Usage:
   python models/train.py --epochs 20 --lr 1e-4 --batch 32 --output checkpoints/solar_lora
+  python models/train.py --model-type surya --epochs 10 --output checkpoints/surya_adapter
 """
 from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+# Allow `models.*` imports when running as `python models/train.py` inside Docker
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import argparse
 import logging
@@ -80,14 +91,25 @@ class SyntheticSolarDataset(Dataset):
 
 def train(args: argparse.Namespace) -> None:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    logger.info("Training on %s", device)
+    logger.info("Training on %s | model-type=%s", device, args.model_type)
 
     # ── Model ──────────────────────────────────────────────────────────────────
-    from models.solar_transformer import SolarTransformer
-    from models.lora_config import get_lora_model
+    use_surya = args.model_type == "surya"
 
-    base = SolarTransformer()
-    model = get_lora_model(base).to(device)
+    if use_surya:
+        from models.surya_adapter import SuryaTimeSeriesAdapter
+        model = SuryaTimeSeriesAdapter(n_features=7).to(device)
+        trainable = model.trainable_parameters()
+        logger.info(
+            "SuryaTimeSeriesAdapter — backbone frozen, trainable params: %d",
+            sum(p.numel() for p in trainable),
+        )
+    else:
+        from models.solar_transformer import SolarTransformer
+        from models.lora_config import get_lora_model
+        base = SolarTransformer()
+        model = get_lora_model(base).to(device)
+        trainable = list(filter(lambda p: p.requires_grad, model.parameters()))
 
     # ── Augment with GAN synthetic storms ──────────────────────────────────────
     if args.gan_augment:
@@ -105,9 +127,9 @@ def train(args: argparse.Namespace) -> None:
     train_loader = DataLoader(train_ds, batch_size=args.batch, shuffle=True)
     val_loader = DataLoader(val_ds, batch_size=args.batch)
 
-    # ── Optimizer ──────────────────────────────────────────────────────────────
+    # ── Optimizer — only trainable params (backbone stays frozen) ─────────────
     optimizer = torch.optim.AdamW(
-        filter(lambda p: p.requires_grad, model.parameters()),
+        trainable,
         lr=args.lr,
         weight_decay=1e-4,
     )
@@ -155,15 +177,37 @@ def train(args: argparse.Namespace) -> None:
         if avg_val < best_val_loss:
             best_val_loss = avg_val
             Path(args.output).mkdir(parents=True, exist_ok=True)
-            from models.lora_config import save_lora_adapter
-            save_lora_adapter(model, args.output)
-            logger.info("✓ Best model saved to %s", args.output)
+            if use_surya:
+                # Save adapter-only state dict (projection + heads; not the frozen backbone)
+                adapter_state = {
+                    k: v for k, v in model.state_dict().items()
+                    if not k.startswith("_backbone")
+                }
+                torch.save(adapter_state, Path(args.output) / "surya_adapter_heads.pt")
+                logger.info("✓ Surya adapter heads saved to %s", args.output)
+            else:
+                from models.lora_config import save_lora_adapter
+                save_lora_adapter(model, args.output)
+                logger.info("✓ Best model saved to %s", args.output)
 
     logger.info("Training complete. Best val loss: %.4f", best_val_loss)
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Fine-tune SolarTransformer with LoRA")
+    parser = argparse.ArgumentParser(
+        description="Fine-tune SolarTransformer (surrogate) or SuryaTimeSeriesAdapter (surya)"
+    )
+    parser.add_argument(
+        "--model-type",
+        type=str,
+        default="surrogate",
+        choices=["surrogate", "surya"],
+        help=(
+            "'surrogate': SolarTransformer + LoRA (default). "
+            "'surya': SuryaTimeSeriesAdapter — trains only projection + heads, "
+            "backbone (Prithvi) stays frozen."
+        ),
+    )
     parser.add_argument("--epochs", type=int, default=20)
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--batch", type=int, default=32)
