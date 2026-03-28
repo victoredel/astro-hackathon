@@ -73,8 +73,11 @@ def build_cone(predictions_df: pd.DataFrame, horizon_minutes: int = 30) -> go.Fi
     ))
 
     # Future horizon marker
+    # Convertir el Timestamp de pandas a string ISO para evitar que Plotly intente sumar Timestamps internamente
+    v_line_pos = future_time.strftime("%Y-%m-%d %H:%M:%S")
+    
     fig.add_vline(
-        x=future_time,
+        x=v_line_pos,
         line_dash="dot",
         line_color="rgba(255,214,0,0.5)",
         annotation_text=f"+{horizon_minutes} min forecast",
