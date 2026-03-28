@@ -112,6 +112,14 @@ class Predictor:
         # Evaluated on RAW physics, not AI logits or normalized tensors.
         if current_bz >= 0.0 and current_speed < 450.0:
             final_prob = min(final_prob, 0.12)
+            conf = 0.99
+
+        # Space Weather Absolute Danger Override:
+        # If the raw magnetic field drops below -25 nT, severe geomagnetic 
+        # disruption is physically guaranteed. Override statistical uncertainty.
+        if current_bz <= -25.0:
+            final_prob = max(final_prob, 0.95)
+            conf = 0.99
 
         return StormPrediction(
             generated_at=now,
