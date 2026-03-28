@@ -16,6 +16,9 @@ services:
     environment:
       - DATABASE_URL=sqlite+aiosqlite:////app/data/solar.db
       - API_BASE_URL=http://api:8000
+      - ENABLE_AI_INFERENCE=true
+      - USE_REAL_SURYA=true
+      - MODEL_CHECKPOINT=checkpoints/surya_adapter
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
