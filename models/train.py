@@ -134,7 +134,7 @@ def train(args: argparse.Namespace) -> None:
         weight_decay=1e-4,
     )
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs)
-    criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([3.0], device=device))  # imbalance
+    criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([1.5], device=device))  # imbalance
 
     best_val_loss = float("inf")
 
