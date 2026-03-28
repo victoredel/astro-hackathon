@@ -26,8 +26,8 @@ import torch.nn as nn
 
 logger = logging.getLogger(__name__)
 
-# Prithvi's Transformer hidden dimension (ViT-Large variant used in EO-1.0)
-PRITHVI_HIDDEN_DIM = 1024
+# Prithvi-EO-1.0-100M uses ViT-Base hidden dim
+PRITHVI_HIDDEN_DIM = 768
 
 
 class _PositionalEncoding(nn.Module):
@@ -78,34 +78,44 @@ class SuryaTimeSeriesAdapter(nn.Module):
         self.hidden_dim = hidden_dim
 
         # ── 1. Load & freeze the Prithvi backbone ─────────────────────────────
-        logger.info("Loading IBM/NASA Prithvi-EO-1.0-100M backbone from HuggingFace Hub…")
+        logger.info("Downloading and loading IBM/NASA Prithvi-EO-1.0-100M manually...")
         try:
-            from transformers import AutoConfig, AutoModel
+            from huggingface_hub import hf_hub_download
+            import importlib.util
 
-            # ── Load config first so we can patch None spatial/temporal fields ──
-            config = AutoConfig.from_pretrained(
-                "ibm-nasa-geospatial/Prithvi-EO-1.0-100M",
-                trust_remote_code=True,
+            # Download official NASA source + weights
+            model_def_path = hf_hub_download(
+                repo_id="ibm-nasa-geospatial/Prithvi-EO-1.0-100M",
+                filename="prithvi_mae.py",
             )
-            # VideoMAE / TemporalViT assumptions — default to 1 frame (pure spatial)
-            if getattr(config, "num_frames", None) is None:
-                config.num_frames = 1
-            if getattr(config, "img_size", None) is None:
-                config.img_size = 224
-            if getattr(config, "patch_size", None) is None:
-                config.patch_size = 16
-            if getattr(config, "num_channels", None) is None:
-                config.num_channels = 6  # Prithvi default (6-band multi-spectral)
+            weights_path = hf_hub_download(
+                repo_id="ibm-nasa-geospatial/Prithvi-EO-1.0-100M",
+                filename="Prithvi_EO_V1_100M.pt",
+            )
 
-            self._backbone = AutoModel.from_pretrained(
-                "ibm-nasa-geospatial/Prithvi-EO-1.0-100M",
-                config=config,
-                trust_remote_code=True,
-                ignore_mismatched_sizes=True,
+            # Dynamically import the module so no pip install of the model code is needed
+            spec = importlib.util.spec_from_file_location("prithvi_mae", model_def_path)
+            prithvi_mae = importlib.util.module_from_spec(spec)
+            sys.modules["prithvi_mae"] = prithvi_mae
+            spec.loader.exec_module(prithvi_mae)
+
+            # Instantiate the 100M ViT-Base architecture
+            self._backbone = prithvi_mae.MaskedAutoencoderViT(
+                img_size=224, patch_size=16, num_frames=3, tubelet_size=1,
+                in_chans=6, embed_dim=768, depth=12, num_heads=12,
+                decoder_embed_dim=512, decoder_depth=8, decoder_num_heads=16,
+                mlp_ratio=4., norm_pix_loss=False,
             )
+
+            # Load pretrained weights (strict=False tolerates decoder mismatch)
+            state_dict = torch.load(weights_path, map_location="cpu")
+            if "model" in state_dict:
+                state_dict = state_dict["model"]
+            self._backbone.load_state_dict(state_dict, strict=False)
+
             self._freeze_backbone()
             self._backbone_loaded = True
-            logger.info("Prithvi backbone loaded and frozen (%d params frozen).",
+            logger.info("✓ Prithvi backbone loaded natively and frozen (%d params frozen).",
                         sum(p.numel() for p in self._backbone.parameters()))
         except Exception as exc:  # noqa: BLE001
             logger.warning(
@@ -194,16 +204,11 @@ class SuryaTimeSeriesAdapter(nn.Module):
         h = self.pos_enc(h)
 
         if self._backbone_loaded:
-            # Prithvi expects a dict or flat tensor depending on version;
-            # we call its encoder directly via the `encoder` attribute which
-            # is standard for HuggingFace ViT-family models.
-            try:
-                backbone_out = self._backbone.encoder(h)
-                # HuggingFace returns BaseModelOutput; extract last_hidden_state
-                h = backbone_out.last_hidden_state if hasattr(backbone_out, "last_hidden_state") else backbone_out
-            except Exception:  # noqa: BLE001
-                # Prithvi entry-point doesn't exist in this version; use stub
-                h = self._backbone(h)
+            # Bypass the 5D spatial patch_embed; inject our projected 1D
+            # time-series directly into the pre-trained Transformer blocks.
+            for blk in self._backbone.blocks:
+                h = blk(h)
+            h = self._backbone.norm(h)
         else:
             h = self._backbone(h)
 
