@@ -4,56 +4,57 @@ import json
 import requests
 import os
 
+# --- Importamos la predicción directamente desde el Backend ---
+try:
+    from pipeline.orbital_collision import calculate_orbital_risk
+except ImportError:
+    calculate_orbital_risk = None
+
 st.set_page_config(page_title="Yörünge Kontrol", page_icon="🛰️", layout="wide")
-st.title("🛰️ TUA Küresel Yörünge Takip ve Çarpışma Tahmini")
+st.title("🛰️ TUA Küresel Yörünge Takip ve Çarpışma Tahmini (Canlı Veri)")
 
 @st.cache_resource
 def load_js_libs():
-    # Dual-CDN with fallback to avoid case-sensitivity 404s on cdnjs
     sources = {
-        "globe": [
-            "https://cdn.jsdelivr.net/npm/globe.gl/dist/globe.gl.min.js",
-            "https://unpkg.com/globe.gl",
-        ],
-        "satellite": [
-            "https://cdn.jsdelivr.net/npm/satellite.js/dist/satellite.min.js",
-            "https://unpkg.com/satellite.js/dist/satellite.min.js",
-        ]
+        "globe": ["https://cdn.jsdelivr.net/npm/globe.gl/dist/globe.gl.min.js", "https://unpkg.com/globe.gl"],
+        "satellite": ["https://cdn.jsdelivr.net/npm/satellite.js/dist/satellite.min.js", "https://unpkg.com/satellite.js/dist/satellite.min.js"]
     }
     content = {}
     for name, urls in sources.items():
         content[name] = ""
         for url in urls:
             try:
-                r = requests.get(url, timeout=8)
+                r = requests.get(url, timeout=5)
                 if r.status_code == 200 and not r.text.strip().startswith("<"):
                     content[name] = r.text
                     break
-            except:
-                pass
+            except: pass
     return content
 
 js_libs = load_js_libs()
 
+# --- NUEVAS FUENTES DE DATOS (SIN AUTORIZACIÓN NI BLOQUEOS) ---
 @st.cache_data(ttl=3600)
 def get_raw_tles():
     urls = {
-        "active": "https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=tle",
-        "debris": "https://celestrak.org/NORAD/elements/gp.php?GROUP=cosmos-2251-debris&FORMAT=tle"
+        # AMSAT: Servidor libre de radioaficionados (Satélites activos)
+        "active": "https://www.amsat.org/tle/current/nasabare.txt",
+        # CELESTRAK (.com y .txt): Archivo de texto estático, evade el firewall del .org/php
+        "debris": "https://celestrak.com/NORAD/elements/cosmos-2251-debris.txt"
     }
     data = []
-    # Simular User-Agent de navegador para evitar bloqueos anti-bot de CelesTrak
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+    headers = {"User-Agent": "Mozilla/5.0"}
     for cat, url in urls.items():
         try:
-            r = requests.get(url, headers=headers, timeout=10)
+            r = requests.get(url, headers=headers, timeout=8)
             if r.status_code == 200:
                 lines = r.text.strip().splitlines()
+                # Extraemos un máximo de 300 objetos por categoría para mantener los 60 FPS
                 for i in range(0, min(len(lines), 900), 3):
                     if i+2 < len(lines):
                         data.append({"n": lines[i].strip(), "l1": lines[i+1].strip(), "l2": lines[i+2].strip(), "t": cat})
-        except Exception as e:
-            print(f"Error cargando {cat}: {e}")
+        except: pass
+    
     return data
 
 tle_payload = get_raw_tles()
@@ -61,21 +62,17 @@ tle_payload = get_raw_tles()
 st.sidebar.header("🌞 Uzay Havası")
 storm_prob = st.sidebar.slider("Güneş Fırtınası Olasılığı (%)", 0, 100, 25)
 
-# --- LLAMADA AL BACKEND (GET con query params) ---
-API_BASE = os.getenv("API_BASE_URL", "http://api:8000")
-API_URL = f"{API_BASE}/api/v1"
+# --- EJECUCIÓN DEL CEREBRO DE COLISIÓN (INSTANTÁNEO, SIN TIMEOUT) ---
 is_danger = False
 radar_message = "SCANNING: ORBIT CLEAR"
 
-try:
-    with st.spinner("📡 Radar Taraması Aktif (Backend hesaplıyor)..."):
-        # Timeout aumentado a 20s para dar tiempo al backend de procesar
-        r = requests.get(f"{API_URL}/orbital/collision-risk", params={"storm_prob": storm_prob}, timeout=20)
-        if r.status_code == 200:
-            data = r.json()
-            is_danger = data.get("is_danger", False)
-            dist_m = data.get("distance_m", 0)
-            rec = data.get("recommendation", "")
+if calculate_orbital_risk:
+    with st.spinner("🧠 Radar Taraması Aktif (Backend hesaplıyor)..."):
+        try:
+            risk_data = calculate_orbital_risk(storm_prob=storm_prob)
+            is_danger = risk_data.get("is_danger", False)
+            dist_m = risk_data.get("distance_m", 0)
+            rec = risk_data.get("recommendation", "")
 
             if is_danger:
                 st.error(f"🚨 **ÇARPIŞMA ALARMI!** Mesafe: {dist_m}m. {rec}")
@@ -83,14 +80,12 @@ try:
             else:
                 st.success(f"✅ GÜVENLİ: Minimum yaklaşma mesafesi {dist_m}m.")
                 radar_message = "SCANNING: ORBIT CLEAR"
-        else:
-            st.sidebar.warning(f"Backend devolvió error: {r.status_code}")
-except requests.exceptions.Timeout:
-    st.sidebar.warning("⏱️ Backend zaman aşımına uğradı (Timeout). Hesaplama çok uzun sürdü.")
-except Exception as e:
-    st.sidebar.warning(f"Backend API kapalı. Hata: {e}")
+        except Exception as e:
+            st.error(f"Hesaplama hatası: {e}")
+else:
+    st.warning("⚠️ API modülü bulunamadı. Lütfen backend dosyalarını kontrol edin.")
 
-# --- HTML BLINDADO ---
+# --- HTML DEL GLOBO ---
 template_html = '''
 <!DOCTYPE html>
 <html>
@@ -117,7 +112,7 @@ template_html = '''
             const isDanger = __IS_DANGER__;
             const satLib = satellite;
 
-            const timeMultiplier = 60; // 1 real sec = 1 orbital min
+            const timeMultiplier = 60; 
             const startTime = Date.now();
 
             const world = Globe()(document.getElementById('globeViz'))
@@ -130,13 +125,8 @@ template_html = '''
                 .width(window.innerWidth)
                 .height(800);
 
-            // Aplicar opcional sin romper chain
             try { world.globeColor('#051124'); } catch(e) {}
-            try {
-                world.globeImageUrl('https://unpkg.com/three-globe/example/img/earth-night.jpg');
-            } catch(e) {}
 
-            // Cargar países (opcional, si no hay red, sigue)
             fetch('https://unpkg.com/three-globe/example/img/world-110m.geojson')
                 .then(res => res.json())
                 .then(countries => {
@@ -146,14 +136,10 @@ template_html = '''
                          .hexPolygonColor(() => 'rgba(0, 255, 204, 0.3)');
                 }).catch(() => {});
 
-            // Parsear TLEs con twoline2satrec (nombre correcto en satellite.js v4+)
             const satData = rawData.map(d => {
                 try { return { ...d, satrec: satLib.twoline2satrec(d.l1, d.l2) }; } 
                 catch(e) { return null; }
             }).filter(s => s !== null);
-
-            document.getElementById('ui').innerHTML =
-                '📡 RADAR: __RADAR_MSG__ | OBJELER: ' + satData.length;
 
             function update() {
                 try {
@@ -168,7 +154,7 @@ template_html = '''
                             
                             const posGeo = satLib.eciToGeodetic(posVel.position, gmst);
                             let alt = posGeo.height / 6371;
-                            if (isDanger && d.t === 'debris') alt *= 0.95; // Simula decaimiento
+                            if (isDanger && d.t === 'debris') alt *= 0.95; 
 
                             return {
                                 lat: satLib.degreesLat(posGeo.latitude),
@@ -180,7 +166,7 @@ template_html = '''
                     }).filter(p => p !== null);
 
                     world.pointsData(points);
-                } catch(e) { console.error("Update error:", e); }
+                } catch(e) {}
                 requestAnimationFrame(update);
             }
 
@@ -197,7 +183,7 @@ template_html = '''
 </html>
 '''
 
-# Reemplazos limpios — sin f-strings para las librerías JS
+# Reemplazos limpios
 html_final = template_html.replace("__SATELLITE_JS__", js_libs['satellite'])
 html_final = html_final.replace("__GLOBE_JS__", js_libs['globe'])
 html_final = html_final.replace("__DATA__", json.dumps(tle_payload))
