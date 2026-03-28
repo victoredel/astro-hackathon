@@ -84,7 +84,7 @@ class Predictor:
 
         # Pad or truncate to seq_len
         if len(records) < seq_len:
-            records = records + [records[-1]] * (seq_len - len(records))
+            records = [records[0]] * (seq_len - len(records)) + records
         else:
             records = records[-seq_len:]
 

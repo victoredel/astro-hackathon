@@ -16,7 +16,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import httpx
 import pandas as pd
@@ -228,42 +228,44 @@ with st.sidebar:
     st.markdown("- SolarTransformer (6L/8H/512d)\n- LoRA fine-tuning (r=16)\n- WGAN-GP augmentation")
     st.divider()
     if st.button("🔴 Simulate CRITICAL Storm"):
-        record = {
-            "timestamp": datetime.now(tz=timezone.utc).isoformat(),
-            "source": "DSCOVR",
-            "bx_gse": 3.2,
-            "by_gse": -5.1,
-            "bz_gse": -52.0,  # extreme southward Bz
-            "speed": 950.0,   # very high speed
-            "density": 28.5,
-            "temperature": 250000.0,
-        }
         try:
-            r = httpx.post(f"{API_BASE}/ingest", json=record, timeout=8.0)
-            if r.status_code == 201:
-                st.success("Storm injected! ⚡")
-                st.cache_data.clear()
-            else:
-                st.error(f"API error: {r.status_code}")
+            now = datetime.now(tz=timezone.utc)
+            for i in range(60):
+                record = {
+                    "timestamp": (now - timedelta(minutes=i)).isoformat(),
+                    "source": "DSCOVR",
+                    "bx_gse": 3.2,
+                    "by_gse": -5.1,
+                    "bz_gse": -52.0,  # extreme southward Bz
+                    "speed": 950.0,   # very high speed
+                    "density": 28.5,
+                    "temperature": 250000.0,
+                }
+                httpx.post(f"{API_BASE}/ingest", json=record, timeout=8.0)
+            
+            st.success("Storm injected! ⚡")
+            st.cache_data.clear()
         except Exception as e:
             st.error(f"Could not reach API: {e}")
 
     if st.button("🟢 Simulate QUIET Period"):
-        record = {
-            "timestamp": datetime.now(tz=timezone.utc).isoformat(),
-            "source": "DSCOVR",
-            "bx_gse": 0.5,
-            "by_gse": 1.2,
-            "bz_gse": 3.0,   # northward Bz — quiet
-            "speed": 380.0,
-            "density": 4.2,
-            "temperature": 90000.0,
-        }
         try:
-            r = httpx.post(f"{API_BASE}/ingest", json=record, timeout=8.0)
-            if r.status_code == 201:
-                st.success("Quiet period simulated 🌙")
-                st.cache_data.clear()
+            now = datetime.now(tz=timezone.utc)
+            for i in range(60):
+                record = {
+                    "timestamp": (now - timedelta(minutes=i)).isoformat(),
+                    "source": "DSCOVR",
+                    "bx_gse": 0.5,
+                    "by_gse": 1.2,
+                    "bz_gse": 0.5,
+                    "speed": 350.0,
+                    "density": 5.0,
+                    "temperature": 90000.0,
+                }
+                httpx.post(f"{API_BASE}/ingest", json=record, timeout=8.0)
+                
+            st.success("Quiet period simulated 🌙")
+            st.cache_data.clear()
         except Exception as e:
             st.error(f"Could not reach API: {e}")
 

@@ -40,6 +40,9 @@ services:
       - DATABASE_URL=sqlite+aiosqlite:////app/data/solar.db
       - API_BASE_URL=http://api:8000
       - INGEST_INTERVAL_SECS=60
+      - ENABLE_AI_INFERENCE=true
+      - USE_REAL_SURYA=true
+      - MODEL_CHECKPOINT=checkpoints/surya_adapter
 
   dashboard:
     image: astro-hackathon-app
