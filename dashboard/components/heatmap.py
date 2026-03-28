@@ -52,8 +52,10 @@ def build_heatmap(predictions_df: pd.DataFrame) -> go.Figure:
         ],
         showscale=True,
         colorbar={
-            "title": "Intensity",
-            "titlefont": {"color": "#e0e8ff"},
+            "title": {
+                "text": "Intensity",
+                "font": {"color": "#e0e8ff"}
+            },
             "tickfont": {"color": "#8892a4"},
             "bgcolor": "rgba(0,0,0,0)",
             "outlinecolor": "rgba(0,0,0,0)",
