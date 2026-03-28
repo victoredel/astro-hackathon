@@ -1,159 +1,95 @@
 import streamlit as st
-import pydeck as pdk
-import pandas as pd
+import streamlit.components.v1 as components
+import json
 import requests
-import math
-import time
-from datetime import datetime, timedelta
-from sgp4.api import Satrec, WGS72
 
 st.set_page_config(page_title="Yörünge Kontrol", page_icon="🛰️", layout="wide")
 
-st.title("🛰️ TUA Küresel Uzay Çöpü ve Aktif Uydu Monitörü (CANLI)")
-st.markdown("Dünya yörüngesindeki nesnelerin WebGL destekli canlı hareketi.")
-st.markdown("---")
-
-# 1. Cargar TLEs una sola vez en memoria (Cache global de recursos)
-@st.cache_resource(ttl=3600)
-def fetch_tles():
+# 1. Obtener datos reales de CelesTrak en el servidor (Python)
+@st.cache_data(ttl=3600)
+def get_raw_tle_data():
     urls = {
         "active": "https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=tle",
         "debris": "https://celestrak.org/NORAD/elements/gp.php?GROUP=cosmos-2251-debris&FORMAT=tle"
     }
-    
-    satrecs_active = []
-    satrecs_debris = []
-    
-    for category, url in urls.items():
+    combined_data = []
+    for cat, url in urls.items():
         try:
-            response = requests.get(url, timeout=10)
-            lines = response.text.strip().split('\n')
-            limit = 400 * 3 # Limitamos a 400 de cada uno para fluidez
-            for i in range(0, min(len(lines), limit), 3):
+            r = requests.get(url, timeout=5)
+            lines = r.text.strip().split('\n')
+            # Tomamos una muestra representativa para no saturar el navegador
+            for i in range(0, min(len(lines), 900), 3):
                 if i+2 < len(lines):
-                    sat = Satrec.twoline2rv(lines[i+1].strip(), lines[i+2].strip())
-                    if category == "active":
-                        satrecs_active.append(sat)
-                    else:
-                        satrecs_debris.append(sat)
-        except Exception as e:
-            pass
-    return satrecs_active, satrecs_debris
+                    combined_data.append({
+                        "name": lines[i].strip(),
+                        "tle_l1": lines[i+1].strip(),
+                        "tle_l2": lines[i+2].strip(),
+                        "type": cat
+                    })
+        except: pass
+    return combined_data
 
-with st.spinner("📡 TLE verileri indiriliyor..."):
-    satrecs_active, satrecs_debris = fetch_tles()
+tle_json = json.dumps(get_raw_tle_data())
 
-# 2. Función para calcular posiciones en un momento dado
-def calculate_positions(satrecs, current_time):
-    jd, fr = current_time.toordinal() + 1721424.5, current_time.hour / 24.0 + current_time.minute / 1440.0 + current_time.second / 86400.0
-    
-    d = jd - 2451545.0 + fr
-    gmst = (18.697374558 + 24.06570982441908 * d) % 24
-    gmst_rad = gmst * 15 * math.pi / 180.0
+# 2. El "Motor Visual" en JavaScript (Globe.gl)
+globe_html = f'''
+<div id="globeViz"></div>
+<script src="//unpkg.com/globe.gl"></script>
+<script src="//unpkg.com/satellite.js/dist/satellite.min.js"></script>
 
-    lats, lons = [], []
-    for sat in satrecs:
-        e, r, v = sat.sgp4(jd, fr)
-        if e == 0:
-            x, y, z = r
-            r_norm = math.sqrt(x**2 + y**2 + z**2)
-            lat = math.degrees(math.asin(z / r_norm))
-            lon = math.degrees(math.atan2(y, x) - gmst_rad)
-            lon = (lon + 180) % 360 - 180
-            lats.append(lat)
-            lons.append(lon)
-    return pd.DataFrame({"lat": lats, "lon": lons})
+<script>
+    const tleData = {tle_json};
+    const satData = tleData.map(d => ({{
+        ...d,
+        satrec: satellite.twoline2rv(d.tle_l1, d.tle_l2)
+    }}));
 
-# 3. Interfaz de Control
-st.sidebar.header("🌞 Uzay Havası (Space Weather)")
-storm_prob = st.sidebar.slider("Güneş Fırtınası Olasılığı (%)", 0, 100, 25)
-is_danger = storm_prob > 75
-deb_color = [255, 75, 75, 200] if is_danger else [255, 152, 0, 200]
+    const world = Globe()
+        (document.getElementById('globeViz'))
+        .globeImageUrl('//unpkg.com/three-globe/example/img/earth-night.jpg')
+        .bumpImageUrl('//unpkg.com/three-globe/example/img/earth-topology.png')
+        .backgroundImageUrl('//unpkg.com/three-globe/example/img/night-sky.png')
+        .showAtmosphere(true)
+        .atmosphereColor('lightskyblue')
+        .atmosphereDaylightAlpha(0.1);
 
-# 4. El bucle de animación (Real-time render)
-col_map, col_alerts = st.columns([3, 1])
+    // Función para actualizar posiciones a 60fps
+    function updatePositions() {{
+        const now = new Date();
+        const gmst = satellite.gstime(now);
 
-# st.empty() es el contenedor que vamos a actualizar constantemente
-map_placeholder = col_map.empty()
+        const points = [];
+        satData.forEach(d => {{
+            try {{
+                const positionAndVelocity = satellite.propagate(d.satrec, now);
+                if (positionAndVelocity && positionAndVelocity.position && positionAndVelocity.position.x !== false) {{
+                    const positionEcf = satellite.eciToGeodetic(positionAndVelocity.position, gmst);
+                    points.push({{
+                        lat: satellite.degreesLat(positionEcf.latitude),
+                        lng: satellite.degreesLong(positionEcf.longitude),
+                        alt: positionEcf.height / 6371, // Normalizado al radio terrestre
+                        type: d.type
+                    }});
+                }}
+            }} catch (e) {{
+                // Skip invalid propagation
+            }}
+        }});
 
-with col_alerts:
-    st.subheader("📊 Canlı İstatistikler")
-    st.metric("Aktif Uydular", len(satrecs_active))
-    st.metric("İzlenen Enkaz", len(satrecs_debris))
-    
-    if is_danger:
-         st.error("🚨 **KRİTİK UYARI**: Atmosferik Drag yüksek.")
-    else:
-         st.success("✅ Yörünge Güvenli.")
+        world.pointsData(points)
+            .pointColor(d => d.type === 'active' ? '#00ffcc' : '#ff4b4b')
+            .pointRadius(0.5)
+            .pointAltitude(d => d.alt);
+            
+        requestAnimationFrame(updatePositions);
+    }}
 
-# Bucle infinito para actualizar las coordenadas y redibujar el mapa PyDeck
-# NOTA: En un hackathon, este bucle simple impresiona mucho.
-time_offset = 0 # Segundos simulados hacia el futuro
-while True:
-    # Aceleramos el tiempo (ej. 1 segundo real = 30 segundos orbitales) para que el movimiento sea evidente
-    simulated_time = datetime.utcnow() + timedelta(seconds=time_offset)
-    
-    df_active = calculate_positions(satrecs_active, simulated_time)
-    df_debris = calculate_positions(satrecs_debris, simulated_time)
-    
-    # 1. Nueva capa: Continentes geométricos puros (Envuelve la esfera)
-    layer_countries = pdk.Layer(
-        "GeoJsonLayer",
-        data="https://raw.githubusercontent.com/johan/world.geo.json/master/countries.geo.json",
-        stroked=True,
-        filled=True,
-        get_fill_color=[10, 25, 47, 255],     # Tierra: Azul muy oscuro (Espacial)
-        get_line_color=[0, 255, 204, 80],     # Bordes: Cyan brillante semi-transparente
-        get_line_width=2,
-    )
+    updatePositions();
+    world.controls().autoRotate = true;
+    world.controls().autoRotateSpeed = 0.5;
+</script>
+<style> body {{ margin: 0; background: black; }} </style>
+'''
 
-    # 2. Capa de PyDeck para Satélites
-    layer_active = pdk.Layer(
-        "ScatterplotLayer",
-        df_active,
-        get_position="[lon, lat]",
-        get_color=[0, 255, 204, 255], # Cyan
-        get_radius=80000,             # Aumentado para que resalte en la esfera
-        radius_min_pixels=2, 
-        radius_max_pixels=5,
-        pickable=True
-    )
-
-    # 3. Capa de PyDeck para Basura
-    layer_debris = pdk.Layer(
-        "ScatterplotLayer",
-        df_debris,
-        get_position="[lon, lat]",
-        get_color=deb_color,
-        get_radius=100000,            # Aumentado
-        radius_min_pixels=2.5,
-        radius_max_pixels=6,
-        pickable=True
-    )
-
-    # Vista Inicial centrada en Turquía con zoom para ver el Globo
-    view_state = pdk.ViewState(
-        latitude=39.0,
-        longitude=35.0,
-        zoom=0.5, # Zoom bajo para ver el planeta redondo
-        pitch=0,  # Mirando de frente al planeta
-    )
-
-    # El Globo 3D
-    globe_view = pdk.View(type="_GlobeView", controller=True)
-
-    # Renderizador (Sin map_provider para forzar la esfera negra)
-    r = pdk.Deck(
-        layers=[layer_countries, layer_active, layer_debris],
-        views=[globe_view],
-        initial_view_state=view_state,
-        map_provider=None, # Fundamental: Apaga el mapa plano para que el Globo funcione
-        tooltip={"text": "Koordinat: {lat}, {lon}"}
-    )
-
-    # Actualizamos el contenedor vacío con el nuevo mapa
-    map_placeholder.pydeck_chart(r)
-    
-    # Avanzamos el reloj de simulación y hacemos una pausa para no quemar la CPU
-    time_offset += 60 # Avanza 1 minuto orbital por cada iteración del bucle
-    time.sleep(1) # Actualiza el mapa cada 1 segundo real
+# 3. Renderizar en Streamlit
+components.html(globe_html, height=800)
