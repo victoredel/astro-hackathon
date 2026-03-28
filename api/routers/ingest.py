@@ -10,11 +10,11 @@ the ML model on every record — useful during the data-collection phase.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, status
-from sqlalchemy import desc, select
+from sqlalchemy import delete, desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.ws_manager import manager
@@ -173,3 +173,16 @@ async def ingest_batch(
         result["prediction"] = pred.model_dump(mode="json")
 
     return result
+
+@router.delete("/window", status_code=status.HTTP_200_OK)
+async def delete_window(
+    minutes: int = Query(60, description="Minutes to delete from now into the past"),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Delete recent telemetry within the given time window (in minutes)."""
+    cutoff_time = datetime.now(timezone.utc) - timedelta(minutes=minutes)
+    await session.execute(
+        delete(TelemetryRecord).where(TelemetryRecord.timestamp >= cutoff_time)
+    )
+    await session.commit()
+    return {"message": "success", "deleted_window_minutes": minutes, "cutoff_time": cutoff_time.isoformat()}

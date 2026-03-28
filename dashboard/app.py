@@ -15,6 +15,7 @@ from pathlib import Path
 # Allow imports from project root
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+import random
 import time
 from datetime import datetime, timedelta, timezone
 
@@ -229,6 +230,7 @@ with st.sidebar:
     st.divider()
     if st.button("🔴 Simulate CRITICAL Storm"):
         try:
+            import requests; requests.delete("http://api:8000/ingest/window?minutes=60")
             now = datetime.now(tz=timezone.utc)
             for i in range(60):
                 record = {
@@ -236,9 +238,9 @@ with st.sidebar:
                     "source": "DSCOVR",
                     "bx_gse": 3.2,
                     "by_gse": -5.1,
-                    "bz_gse": -52.0,  # extreme southward Bz
-                    "speed": 950.0,   # very high speed
-                    "density": 28.5,
+                    "bz_gse": random.uniform(-60.0, -45.0),
+                    "speed": random.uniform(800.0, 1100.0),
+                    "density": random.uniform(30.0, 50.0),
                     "temperature": 250000.0,
                 }
                 httpx.post(f"{API_BASE}/ingest", json=record, timeout=8.0)
@@ -250,6 +252,7 @@ with st.sidebar:
 
     if st.button("🟢 Simulate QUIET Period"):
         try:
+            import requests; requests.delete("http://api:8000/ingest/window?minutes=60")
             now = datetime.now(tz=timezone.utc)
             for i in range(60):
                 record = {
@@ -257,9 +260,9 @@ with st.sidebar:
                     "source": "DSCOVR",
                     "bx_gse": 0.5,
                     "by_gse": 1.2,
-                    "bz_gse": 0.5,
-                    "speed": 350.0,
-                    "density": 5.0,
+                    "bz_gse": random.uniform(0.5, 3.5),
+                    "speed": random.uniform(300.0, 400.0),
+                    "density": random.uniform(2.0, 8.0),
                     "temperature": 90000.0,
                 }
                 httpx.post(f"{API_BASE}/ingest", json=record, timeout=8.0)
