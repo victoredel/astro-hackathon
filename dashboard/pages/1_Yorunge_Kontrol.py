@@ -96,48 +96,58 @@ while True:
     df_active = calculate_positions(satrecs_active, simulated_time)
     df_debris = calculate_positions(satrecs_debris, simulated_time)
     
-    # Capa de PyDeck para Satélites
+    # 1. Nueva capa: Continentes geométricos puros (Envuelve la esfera)
+    layer_countries = pdk.Layer(
+        "GeoJsonLayer",
+        data="https://raw.githubusercontent.com/johan/world.geo.json/master/countries.geo.json",
+        stroked=True,
+        filled=True,
+        get_fill_color=[10, 25, 47, 255],     # Tierra: Azul muy oscuro (Espacial)
+        get_line_color=[0, 255, 204, 80],     # Bordes: Cyan brillante semi-transparente
+        get_line_width=2,
+    )
+
+    # 2. Capa de PyDeck para Satélites
     layer_active = pdk.Layer(
         "ScatterplotLayer",
         df_active,
         get_position="[lon, lat]",
-        get_color=[0, 255, 204, 200], # Cyan
-        get_radius=10000, # Reducido a 10km
-        radius_min_pixels=1, # Evita que desaparezcan al alejar
-        radius_max_pixels=3, # Evita que se vuelvan manchas al acercar
+        get_color=[0, 255, 204, 255], # Cyan
+        get_radius=80000,             # Aumentado para que resalte en la esfera
+        radius_min_pixels=2, 
+        radius_max_pixels=5,
         pickable=True
     )
 
-    # Capa de PyDeck para Basura
+    # 3. Capa de PyDeck para Basura
     layer_debris = pdk.Layer(
         "ScatterplotLayer",
         df_debris,
         get_position="[lon, lat]",
         get_color=deb_color,
-        get_radius=15000, # Reducido a 15km
-        radius_min_pixels=1.5,
-        radius_max_pixels=4,
+        get_radius=100000,            # Aumentado
+        radius_min_pixels=2.5,
+        radius_max_pixels=6,
         pickable=True
     )
 
-    # Vista Inicial centrada en Turquía
+    # Vista Inicial centrada en Turquía con zoom para ver el Globo
     view_state = pdk.ViewState(
         latitude=39.0,
         longitude=35.0,
-        zoom=1, # Reducimos un poco el zoom para ver mejor la curvatura
-        pitch=45,
+        zoom=0.5, # Zoom bajo para ver el planeta redondo
+        pitch=0,  # Mirando de frente al planeta
     )
 
-    # Activamos explícitamente el motor de Globo 3D
+    # El Globo 3D
     globe_view = pdk.View(type="_GlobeView", controller=True)
 
-    # Renderizador con la vista esférica activada
+    # Renderizador (Sin map_provider para forzar la esfera negra)
     r = pdk.Deck(
-        layers=[layer_active, layer_debris],
+        layers=[layer_countries, layer_active, layer_debris],
+        views=[globe_view],
         initial_view_state=view_state,
-        views=[globe_view],   # <-- ¡Esto convierte el mapa plano en una esfera 3D!
-        map_provider="carto", 
-        map_style="dark",     
+        map_provider=None, # Fundamental: Apaga el mapa plano para que el Globo funcione
         tooltip={"text": "Koordinat: {lat}, {lon}"}
     )
 
