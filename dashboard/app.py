@@ -23,6 +23,8 @@ import httpx
 import pandas as pd
 import streamlit as st
 
+from pipeline.cognitive_ldpc import simulate_deep_space_transmission
+
 # ── Page configuration ─────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="☀ Solar Storm Early Warning",
@@ -30,6 +32,9 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+if 'ldpc_sim_result' not in st.session_state:
+    st.session_state.ldpc_sim_result = None
 
 # ── Dark space theme CSS ───────────────────────────────────────────────────────
 st.markdown("""
@@ -360,6 +365,68 @@ with col_insights:
         label="⏱ Forecast Window",
         value=f"+{horizon} min",
     )
+
+st.divider()
+
+# ── Deep Space LDPC Challenge ──────────────────────────────────────────────────
+current_prob = prob * 100 if prob else 0.0
+
+st.markdown("---")
+st.subheader("🪐 Derin Uzay İletişim Protokolü (Deep Space LDPC)")
+st.caption("Yapay zeka tahminlerine dayalı otonom veri sıkıştırma ve hata düzeltme (FEC) simülasyonu.")
+
+if st.button("🚀 Mars Yüzeyinden Veri İletimini Simüle Et"):
+    # Limpiamos el estado anterior
+    st.session_state.ldpc_sim_result = None
+    
+    # Elementos visuales para la animación
+    anim_text = st.empty()
+    progress_bar = st.progress(0)
+    
+    # Animación Paso 1: Transmisión
+    anim_text.info("🛰️ **Adım 1:** Mars Rover verisi hazırlanıyor... (Veri boyutu: 240 bit / 1.0 MB Payload)")
+    for percent in range(1, 35):
+        progress_bar.progress(percent)
+        time.sleep(0.02)
+        
+    # Animación Paso 2: Interferencia de Tormenta
+    anim_text.warning("⚠️ **Adım 2: UYARI!** Güneş radyasyonu sinyale çarptı. İyonosferik parazit nedeniyle bitler bozuluyor (Bit-Flipping)...")
+    for percent in range(35, 75):
+        progress_bar.progress(percent)
+        time.sleep(0.04) # Más lento para generar tensión
+        
+    # Animación Paso 3: Matemáticas al rescate
+    anim_text.error("🧮 **Adım 3:** Sinyal kritik hasar aldı! Bilişsel LDPC onarım algoritması devreye giriyor...")
+    
+    # Ejecutamos la función real pesada
+    st.session_state.ldpc_sim_result = simulate_deep_space_transmission(current_prob)
+    
+    for percent in range(75, 101):
+        progress_bar.progress(percent)
+        time.sleep(0.02)
+        
+    # Limpiamos los placeholders de animación una vez terminado
+    anim_text.empty()
+    progress_bar.empty()
+
+# Renderizamos el resultado guardado en memoria (resiste los auto-refresh)
+if st.session_state.ldpc_sim_result:
+    result = st.session_state.ldpc_sim_result
+    
+    if 'error' in result:
+        st.error(f"Simülasyon Hatası: {result['error']}")
+    else:
+        st.markdown("#### 📡 **İletim Raporu (Transmission Report)**")
+        cols = st.columns(4)
+        cols[0].metric("İletim Modu (Mode)", result['mode'])
+        cols[1].metric("Kanal Gürültüsü (SNR)", f"{result['snr']} dB")
+        cols[2].metric("Radyasyon Hasarı", f"{result['corrupted_bits']} bit")
+        cols[3].metric("Kurtarma Oranı", f"%{result['success_rate']:.1f}")
+        
+        if result['recovered_100_percent']:
+            st.success(f"✅ **GÖREV BAŞARILI:** Yapay zeka modülasyonu radyasyon gürültüsünü yendi. Bozulan **{result['corrupted_bits']} bit** LDPC matrisi ile %100 oranında kurtarıldı.")
+        else:
+            st.warning(f"⚠️ **KISMİ KAYIP:** Fırtına çok şiddetliydi, ancak LDPC algoritması **{result['corrupted_bits']} hatalı bitin** büyük kısmını onarmayı başardı.")
 
 st.divider()
 
