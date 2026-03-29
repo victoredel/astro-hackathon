@@ -10,14 +10,12 @@ import plotly.graph_objects as go
 
 def build_heatmap(predictions_df: pd.DataFrame) -> go.Figure:
     """
-    Build a heatmap of storm probability over time.
-
-    Expected columns: generated_at, storm_probability, alert_level
+    Fırtına olasılığının zaman içindeki ısı haritasını oluşturur.
     """
     if predictions_df.empty:
         fig = go.Figure()
         fig.update_layout(
-            title="No prediction data yet",
+            title="Henüz tahmin verisi yok",
             paper_bgcolor="rgba(13,17,35,0)",
             font={"color": "#e0e8ff"},
             height=200,
@@ -28,8 +26,8 @@ def build_heatmap(predictions_df: pd.DataFrame) -> go.Figure:
     times = df["generated_at"].tolist()
     probs = df["storm_probability"].tolist()
 
-    # Create 2D matrix: rows = intensity buckets, cols = time
-    buckets = ["Kp 0-2\n(Quiet)", "Kp 3-4\n(Unsettled)", "Kp 5-6\n(Storm)", "Kp 7+\n(Severe)"]
+    # Kategori tanımları
+    buckets = ["Kp 0-2 (Sakin)", "Kp 3-4 (Değişken)", "Kp 5-6 (Fırtına)", "Kp 7+ (Şiddetli)"]
     thresholds = [0.15, 0.40, 0.70, 0.90]
     n_buckets = len(buckets)
     n_times = len(times)
@@ -53,18 +51,18 @@ def build_heatmap(predictions_df: pd.DataFrame) -> go.Figure:
         showscale=True,
         colorbar={
             "title": {
-                "text": "Intensity",
+                "text": "Şiddet",
                 "font": {"color": "#e0e8ff"}
             },
             "tickfont": {"color": "#8892a4"},
             "bgcolor": "rgba(0,0,0,0)",
             "outlinecolor": "rgba(0,0,0,0)",
         },
-        hovertemplate="Time: %{x}<br>Level: %{y}<br>Intensity: %{z:.2f}<extra></extra>",
+        hovertemplate="Zaman: %{x}<br>Seviye: %{y}<br>Şiddet: %{z:.2f}<extra></extra>",
     ))
 
     fig.update_layout(
-        title={"text": "Geomagnetic Activity Forecast Heatmap", "font": {"color": "#e0e8ff", "size": 14}},
+        title={"text": "Jeomanyetik Aktivite Tahmin Isı Haritası", "font": {"color": "#e0e8ff", "size": 14}},
         paper_bgcolor="rgba(13,17,35,0)",
         plot_bgcolor="rgba(255,255,255,0.02)",
         font={"color": "#e0e8ff", "family": "Inter, sans-serif"},

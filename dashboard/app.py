@@ -2,9 +2,9 @@
 Solar Storm Early Warning — Time-Lapse AI Dashboard
 TUA Astro Hackathon 2026
 
-Main Streamlit application. Polls the FastAPI backend every 5 seconds
-and renders a live dashboard showing storm probability, solar wind
-parameters, heatmaps, and an uncertainty cone chart.
+Türkçe Yerelleştirilmiş Sürüm.
+Her 5 saniyede bir FastAPI backend'ini sorgular ve canlı fırtına olasılığını,
+güneş rüzgarı parametrelerini ve risk grafiklerini render eder.
 """
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ import os
 import sys
 from pathlib import Path
 
-# Allow imports from project root
+# Proje kök dizininden içe aktarma izni
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import random
@@ -26,9 +26,9 @@ import streamlit as st
 from pipeline.cognitive_ldpc import simulate_deep_space_transmission
 from pipeline.terrestrial_impact import calculate_terrestrial_impact
 
-# ── Page configuration ─────────────────────────────────────────────────────────
+# ── Sayfa yapılandırması ─────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="☀ Solar Storm Early Warning",
+    page_title="Güneş Fırtınası Erken Uyarı",
     page_icon="🌩",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -39,7 +39,7 @@ if 'ldpc_sim_result' not in st.session_state:
 if 'terrestrial_sim_result' not in st.session_state:
     st.session_state.terrestrial_sim_result = None
 
-# ── Dark space theme CSS ───────────────────────────────────────────────────────
+# ── Koyu tema CSS ───────────────────────────────────────────────────────
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Space+Mono:wght@400;700&display=swap');
@@ -149,13 +149,13 @@ div[data-testid="stMetricValue"] {
 </style>
 """, unsafe_allow_html=True)
 
-# ── Configuration ──────────────────────────────────────────────────────────────
+# ── Yapılandırma ──────────────────────────────────────────────────────────────
 API_BASE = os.getenv("API_BASE_URL", "http://localhost:8000")
 REFRESH_SECS = 5
-HISTORY_LIMIT = 120  # last 2 hours of predictions
+HISTORY_LIMIT = 120  # son 2 saatlik tahminler
 
 
-# ── Data fetching ──────────────────────────────────────────────────────────────
+# ── Veri çekme ──────────────────────────────────────────────────────────────
 
 @st.cache_data(ttl=REFRESH_SECS)
 def fetch_latest() -> dict:
@@ -193,7 +193,6 @@ def fetch_history() -> pd.DataFrame:
 
 @st.cache_data(ttl=REFRESH_SECS)
 def fetch_telemetry_history() -> pd.DataFrame:
-    """Fetch telemetry records from DB via a helper endpoint (or return synthetic demo data)."""
     try:
         r = httpx.get(f"{API_BASE}/telemetry/history", params={"limit": HISTORY_LIMIT}, timeout=5.0)
         r.raise_for_status()
@@ -203,7 +202,6 @@ def fetch_telemetry_history() -> pd.DataFrame:
             df["timestamp"] = pd.to_datetime(df["timestamp"])
         return df
     except Exception:  # noqa: BLE001
-        # Return synthetic demo data for standalone dashboard display
         import numpy as np
         rng = np.random.default_rng(int(time.time()) % 1000)
         n = 60
@@ -216,27 +214,27 @@ def fetch_telemetry_history() -> pd.DataFrame:
         })
 
 
-# ── Sidebar ────────────────────────────────────────────────────────────────────
+# ── Yan Panel (Sidebar) ────────────────────────────────────────────────────────────────────
 with st.sidebar:
-    st.markdown("## ⚙️ Controls")
-    auto_refresh = st.toggle("Auto-refresh", value=True)
-    refresh_rate = st.slider("Refresh interval (s)", 2, 30, REFRESH_SECS)
+    st.markdown("## ⚙️ Kontroller")
+    auto_refresh = st.toggle("Otomatik Yenileme", value=True)
+    refresh_rate = st.slider("Yenileme Aralığı (sn)", 2, 30, REFRESH_SECS)
     st.divider()
-    st.markdown("### 🛰 Data Sources")
-    st.markdown("- **DSCOVR L1** (primary)\n- **ACE** (secondary)\n- **NOAA SWPC** real-time JSON")
+    st.markdown("### 🛰️ Veri Kaynakları")
+    st.markdown("- **DSCOVR L1** (birincil)\n- **ACE** (ikincil)\n- **NOAA SWPC** gerçek zamanlı JSON")
     st.markdown("""
 <div style="margin-top:10px;font-size:0.82rem;font-family:'Space Mono',monospace;line-height:1.9;">
-🟢 DSCOVR Link: <b>ACTIVE</b> | Ping: 45ms<br>
-🟢 ACE Fallback: <b>STANDBY</b> | Ping: 61ms<br>
-🟡 GOES-18 Aux: <b>DEGRADED</b> | Ping: 120ms<br>
-🟢 NOAA API: <b>ACTIVE</b> | Latency: 38ms
+🟢 DSCOVR Bağlantısı: <b>AKTİF</b> | Ping: 45ms<br>
+🟢 ACE Yedek: <b>BEKLEMEDE</b> | Ping: 61ms<br>
+🟡 GOES-18 Yard.: <b>ZAYIF</b> | Ping: 120ms<br>
+🟢 NOAA API: <b>AKTİF</b> | Gecikme: 38ms
 </div>
 """, unsafe_allow_html=True)
     st.divider()
     st.markdown("### 🤖 Model")
-    st.markdown("- SolarTransformer (6L/8H/512d)\n- LoRA fine-tuning (r=16)\n- WGAN-GP augmentation")
+    st.markdown("- SolarTransformer (6L/8H/512d)\n- LoRA ince ayar (r=16)\n- WGAN-GP artırımı")
     st.divider()
-    if st.button("🔴 Simulate CRITICAL Storm"):
+    if st.button("🔴 KRİTİK Fırtına Simüle Et"):
         try:
             import requests; requests.delete("http://api:8000/ingest/window?minutes=60")
             now = datetime.now(tz=timezone.utc)
@@ -252,13 +250,12 @@ with st.sidebar:
                     "temperature": 250000.0,
                 }
                 httpx.post(f"{API_BASE}/ingest", json=record, timeout=8.0)
-            
-            st.success("Storm injected! ⚡")
+            st.success("Fırtına enjekte edildi! ⚡")
             st.cache_data.clear()
         except Exception as e:
-            st.error(f"Could not reach API: {e}")
+            st.error(f"API'ye ulaşılamıyor: {e}")
 
-    if st.button("🟢 Simulate QUIET Period"):
+    if st.button("🟢 SAKİN Dönem Simüle Et"):
         try:
             import requests; requests.delete("http://api:8000/ingest/window?minutes=60")
             now = datetime.now(tz=timezone.utc)
@@ -274,17 +271,16 @@ with st.sidebar:
                     "temperature": 90000.0,
                 }
                 httpx.post(f"{API_BASE}/ingest", json=record, timeout=8.0)
-                
-            st.success("Quiet period simulated 🌙")
+            st.success("Sakin dönem simüle edildi 🌙")
             st.cache_data.clear()
         except Exception as e:
-            st.error(f"Could not reach API: {e}")
+            st.error(f"API'ye ulaşılamıyor: {e}")
 
     st.divider()
     st.caption(f"TUA Astro Hackathon 2026 | {datetime.now(tz=timezone.utc).strftime('%Y-%m-%d')}")
 
 
-# ── Fetch data ─────────────────────────────────────────────────────────────────
+# ── Verileri Al ─────────────────────────────────────────────────────────────────
 latest = fetch_latest()
 history_df = fetch_history()
 telemetry_df = fetch_telemetry_history()
@@ -294,50 +290,48 @@ conf = latest.get("confidence_score", 0.0)
 alert = latest.get("alert_level", "NORMAL")
 kp = latest.get("kp_index_estimate")
 horizon = latest.get("horizon_minutes", 30)
-gen_at = latest.get("generated_at", "")
-target_ts = latest.get("target_timestamp", "")
-primary_driver = latest.get("primary_driver") or "Stable solar wind parameters."
+primary_driver = latest.get("primary_driver") or "Güneş rüzgarı parametreleri stabil."
 
-# ── Header ─────────────────────────────────────────────────────────────────────
+# ── Başlık (Header) ─────────────────────────────────────────────────────────────────────
 st.markdown(f"""
 <div class="solar-header">
   <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
     <div>
       <h1 style="margin:0;font-size:1.8rem;font-weight:700;color:#e0e8ff;">
-        ☀️ Solar Storm Early Warning Network
+        ☀️ Güneş Fırtınası Erken Uyarı Ağı
       </h1>
       <p style="margin:0;color:#8892a4;font-size:0.85rem;margin-top:4px;">
-        TUA Astro Hackathon 2026 · Real-Time Geomagnetic Threat Assessment
+        TUA Astro Hackathon 2026 · Gerçek Zamanlı Jeomanyetik Tehdit Değerlendirmesi
       </p>
     </div>
     <div style="text-align:right;">
-      <div style="color:#8892a4;font-size:0.75rem;">Last updated</div>
+      <div style="color:#8892a4;font-size:0.75rem;">Son güncelleme</div>
       <div style="font-family:'Space Mono',monospace;color:#64b5f6;font-size:0.9rem;">
         {datetime.now(tz=timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}
       </div>
-      <div style="color:#8892a4;font-size:0.75rem;margin-top:4px;">Forecast horizon: +{horizon} min</div>
+      <div style="color:#8892a4;font-size:0.75rem;margin-top:4px;">Tahmin ufku: +{horizon} dakika</div>
     </div>
   </div>
 </div>
 """, unsafe_allow_html=True)
 
-# ── Alert banner ───────────────────────────────────────────────────────────────
+# ── Uyarı Banner'ı ───────────────────────────────────────────────────────────────
 alert_icons = {"NORMAL": "🟢", "WARNING": "🟡", "CRITICAL": "🔴"}
 alert_msgs = {
-    "NORMAL": "All Clear — Solar activity within normal parameters",
-    "WARNING": "⚠️ ELEVATED ACTIVITY — Monitor closely. Storm possible within forecast window.",
-    "CRITICAL": "🚨 GEOMAGNETIC STORM ALERT — Severe space weather event imminent! Take protective measures.",
+    "NORMAL": "Güvenli — Güneş aktivitesi normal sınırlarda",
+    "WARNING": "⚠️ YÜKSEK AKTİVİTE — Tahmin penceresinde fırtına olasılığı. Yakından izleyin.",
+    "CRITICAL": "🚨 JEOMANYETİK FIRTINA ALARMI — Şiddetli olay bekleniyor! Koruyucu önlemleri alın.",
 }
 alert_class = alert.lower()
 st.markdown(
-    f'<div class="alert-{alert_class}">{alert_icons.get(alert,"●")} {alert_msgs.get(alert,"Status unknown")}</div>',
+    f'<div class="alert-{alert_class}">{alert_icons.get(alert,"●")} {alert_msgs.get(alert,"Durum bilinmiyor")}</div>',
     unsafe_allow_html=True,
 )
 
 st.markdown("<br>", unsafe_allow_html=True)
 
 # ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║  ROW 1 — THE VERDICT                                                        ║
+# ║  1. SATIR — KARAR                                                            ║
 # ╚══════════════════════════════════════════════════════════════════════════════╝
 col_gauge, col_insights = st.columns([1, 1])
 
@@ -346,101 +340,66 @@ with col_gauge:
     st.plotly_chart(build_gauge(prob, alert, conf), use_container_width=True, config={"displayModeBar": False})
 
 with col_insights:
-    # Add vertical spacing to align with the visual center of the Plotly gauge
     st.markdown("<br><br>", unsafe_allow_html=True)
-    
-    st.markdown('<p class="section-label">🧠 Model Insights</p>', unsafe_allow_html=True)
-    driver_text = f"**{primary_driver}**\n\n*Heuristic XAI · Based on latest L1 telemetry reading*"
+    st.markdown('<p class="section-label">🧠 Model Öngörüleri</p>', unsafe_allow_html=True)
+    driver_text = f"**{primary_driver}**\n\n*Hevristik XAI · En son L1 telemetri analizine dayanmaktadır*"
     if alert == "CRITICAL":
         st.error(driver_text, icon="🔴")
     elif alert == "WARNING":
         st.warning(driver_text, icon="🟡")
     else:
         st.info(driver_text, icon="🟢")
-        
     st.markdown("<br>", unsafe_allow_html=True)
-    st.metric(
-        label="🧲 Est. Kp Index",
-        value=f"{kp:.1f}" if kp is not None else "—",
-        help="Estimated planetary K-index (0=quiet, 9=extreme storm)",
-    )
-    st.metric(
-        label="⏱ Forecast Window",
-        value=f"+{horizon} min",
-    )
+    st.metric(label="🧲 Tahmin Edilen Kp İndeksi", value=f"{kp:.1f}" if kp is not None else "—", help="Tahmini gezegensel K-indeksi (0=sakin, 9=ekstrem fırtına)")
+    st.metric(label="⏱ Tahmin Penceresi", value=f"+{horizon} dak")
 
 st.divider()
 
-# ── Deep Space LDPC Challenge ──────────────────────────────────────────────────
+# ── Derin Uzay LDPC Simülasyonu ──────────────────────────────────────────────────
 current_prob = prob * 100 if prob else 0.0
-
 st.markdown("---")
 st.subheader("🪐 Derin Uzay İletişim Protokolü (Deep Space LDPC)")
 st.caption("Yapay zeka tahminlerine dayalı otonom veri sıkıştırma ve hata düzeltme (FEC) simülasyonu.")
 
 if st.button("🚀 Mars Yüzeyinden Veri İletimini Simüle Et"):
-    # Limpiamos el estado anterior
     st.session_state.ldpc_sim_result = None
-    
-    # Elementos visuales para la animación
     anim_text = st.empty()
     progress_bar = st.progress(0)
-    
-    # Animación Paso 1: Transmisión
     anim_text.info("🛰️ **Adım 1:** Mars Rover verisi hazırlanıyor... (Veri boyutu: 240 bit / 1.0 MB Payload)")
     for percent in range(1, 35):
-        progress_bar.progress(percent)
-        time.sleep(0.02)
-        
-    # Animación Paso 2: Interferencia de Tormenta
+        progress_bar.progress(percent); time.sleep(0.02)
     anim_text.warning("⚠️ **Adım 2: UYARI!** Güneş radyasyonu sinyale çarptı. İyonosferik parazit nedeniyle bitler bozuluyor (Bit-Flipping)...")
     for percent in range(35, 75):
-        progress_bar.progress(percent)
-        time.sleep(0.04) # Más lento para generar tensión
-        
-    # Animación Paso 3: Matemáticas al rescate
+        progress_bar.progress(percent); time.sleep(0.04) 
     anim_text.error("🧮 **Adım 3:** Sinyal kritik hasar aldı! Bilişsel LDPC onarım algoritması devreye giriyor...")
-    
-    # Ejecutamos la función real pesada
     st.session_state.ldpc_sim_result = simulate_deep_space_transmission(current_prob)
-    
     for percent in range(75, 101):
-        progress_bar.progress(percent)
-        time.sleep(0.02)
-        
-    # Limpiamos los placeholders de animación una vez terminado
-    anim_text.empty()
-    progress_bar.empty()
+        progress_bar.progress(percent); time.sleep(0.02)
+    anim_text.empty(); progress_bar.empty()
 
-# Renderizamos el resultado guardado en memoria (resiste los auto-refresh)
 if st.session_state.ldpc_sim_result:
     result = st.session_state.ldpc_sim_result
-    
     if 'error' in result:
         st.error(f"Simülasyon Hatası: {result['error']}")
     else:
-        st.markdown("#### 📡 **İletim Raporu (Transmission Report)**")
+        st.markdown("#### 📡 **İletim Raporu**")
         cols = st.columns(4)
-        cols[0].metric("İletim Modu (Mode)", result['mode'])
+        cols[0].metric("İletim Modu", result['mode'])
         cols[1].metric("Kanal Gürültüsü (SNR)", f"{result['snr']} dB")
         cols[2].metric("Radyasyon Hasarı", f"{result['corrupted_bits']} bit")
         cols[3].metric("Kurtarma Oranı", f"%{result['success_rate']:.1f}")
-        
         if result['recovered_100_percent']:
-            st.success(f"✅ **GÖREV BAŞARILI:** Yapay zeka modülasyonu radyasyon gürültüsünü yendi. Bozulan **{result['corrupted_bits']} bit** LDPC matrisi ile %100 oranında kurtarıldı.")
+            st.success(f"✅ **GÖREV BAŞARILI:** Yapay zeka modülasyonu radyasyon gürültüsünü yendi. Bozulan **{result['corrupted_bits']} bit** %100 oranında kurtarıldı.")
         else:
-            st.warning(f"⚠️ **KISMİ KAYIP:** Fırtına çok şiddetliydi, ancak LDPC algoritması **{result['corrupted_bits']} hatalı bitin** büyük kısmını onarmayı başardı.")
+            st.warning(f"⚠️ **KISMİ KAYIP:** Fırtına çok şiddetliydi, ancak LDPC algoritması hataların çoğunu onarmayı başardı.")
 
-import streamlit.components.v1 as components
-
-# ── TEİAŞ GIC Risk Engine ──────────────────────────────────────────────────────
+# ── TEİAŞ GIC Risk Motoru ──────────────────────────────────────────────────────
 st.markdown("---")
-st.subheader("⚡ TEİAŞ Kritik Altyapı Koruma (Terrestrial GIC Risk Engine)")
-st.caption("Türkiye'nin enlemine ve Bz yönelimine göre otomatik şebeke manevra simülasyonu.")
+st.subheader("⚡ Kritik Altyapı Koruma (Terrestrial GIC Risk Engine)")
+st.caption("Konum ve Bz yönelimine göre otomatik şebeke manevra simülasyonu.")
 
 terrestrial_data = calculate_terrestrial_impact(current_prob)
 storm_severe = terrestrial_data['terrestrial_risk'] > 80
-
 col_data, col_anim = st.columns([1, 2])
 
 with col_data:
@@ -450,9 +409,7 @@ with col_data:
 
 with col_anim:
     if storm_severe:
-        st.error("🚨 **KRİTİK UYARI:** Şebeke ayırma protokolü devrede. (Protocolo de Desconexión)")
-        
-        # SVG sin espacios a la izquierda para evitar el bug de Markdown
+        st.error("🚨 **KRİTİK UYARI:** Şebeke ayırma protokolü devrede.")
         svg_animation = """
 <div style="display: flex; justify-content: center; align-items: center; padding: 20px; background-color: #1E1E1E; border-radius: 10px; border: 2px solid #FF4B4B;">
     <svg width="350" height="120" viewBox="0 0 350 120">
@@ -478,11 +435,9 @@ with col_anim:
 </div>
 """
         st.markdown(svg_animation, unsafe_allow_html=True)
-        st.info("⚡ Akkuyu ve Atatürk trafoları fiziksel olarak şebekeden ayrıldı.")
-        
+        st.info("⚡ Şebeke güvenliği için trafolar fiziksel olarak ayrıldı.")
     else:
         st.success("✅ **DURUM NORMAL:** Şebeke bağlı ve operasyonel.")
-        
         svg_connected = """
 <div style="display: flex; justify-content: center; align-items: center; padding: 20px; background-color: #1E1E1E; border-radius: 10px; border: 2px solid #4CAF50;">
     <svg width="350" height="120" viewBox="0 0 350 120">
@@ -502,57 +457,39 @@ with col_anim:
 
 st.divider()
 
-# ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║  ROW 2 — THE FORECAST (Cone left · Heatmap right)                           ║
-# ╚══════════════════════════════════════════════════════════════════════════════╝
+# ── Tahmin Görselleri ─────────────────────────────────────────────────────────
 col_cone, col_heat = st.columns([1, 1])
-
 with col_cone:
-    st.markdown('<p class="section-label">🌀 Uncertainty Cone</p>', unsafe_allow_html=True)
+    st.markdown('<p class="section-label">🌀 Belirsizlik Konisi</p>', unsafe_allow_html=True)
     from dashboard.components.cone import build_cone
-    st.plotly_chart(
-        build_cone(history_df if not history_df.empty else pd.DataFrame(), horizon),
-        use_container_width=True,
-        config={"displayModeBar": False},
-    )
-
+    st.plotly_chart(build_cone(history_df if not history_df.empty else pd.DataFrame(), horizon), use_container_width=True, config={"displayModeBar": False})
 with col_heat:
-    st.markdown('<p class="section-label">🌐 Activity Forecast Heatmap</p>', unsafe_allow_html=True)
+    st.markdown('<p class="section-label">🌐 Aktivite Tahmin Isı Haritası</p>', unsafe_allow_html=True)
     from dashboard.components.heatmap import build_heatmap
-    st.plotly_chart(
-        build_heatmap(history_df if not history_df.empty else pd.DataFrame()),
-        use_container_width=True,
-        config={"displayModeBar": False},
-    )
+    st.plotly_chart(build_heatmap(history_df if not history_df.empty else pd.DataFrame()), use_container_width=True, config={"displayModeBar": False})
 
 st.divider()
 
-# ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║  ROW 3 — THE EVIDENCE (Full-width time-series)                               ║
-# ╚══════════════════════════════════════════════════════════════════════════════╝
-st.markdown('<p class="section-label">📡 Real-Time Solar Wind Parameters</p>', unsafe_allow_html=True)
+# ── Telemetri ─────────────────────────────────────────────────────────────────
+st.markdown('<p class="section-label">📡 Gerçek Zamanlı Güneş Rüzgarı Parametreleri</p>', unsafe_allow_html=True)
 if not telemetry_df.empty:
     from dashboard.components.timeseries import build_timeseries
     st.plotly_chart(build_timeseries(telemetry_df), use_container_width=True, config={"displayModeBar": False})
 else:
-    st.info("Waiting for telemetry data from NOAA SWPC...")
+    st.info("NOAA SWPC'den telemetri verileri bekleniyor...")
 
-# ── Recent predictions table ───────────────────────────────────────────────────
+# ── Tablo ─────────────────────────────────────────────────────────────────────
 if not history_df.empty:
     st.divider()
-    st.markdown('<p class="section-label">📋 Prediction Log (last 10)</p>', unsafe_allow_html=True)
+    st.markdown('<p class="section-label">📋 Tahmin Günlüğü (Son 10)</p>', unsafe_allow_html=True)
+    rename_map = {"generated_at": "Oluşturulma", "storm_probability": "Fırtına Olasılığı", "confidence_score": "Güven Skoru", "alert_level": "Uyarı", "kp_index_estimate": "Kp İndeksi"}
     display_cols = ["generated_at", "storm_probability", "confidence_score", "alert_level", "kp_index_estimate"]
     available = [c for c in display_cols if c in history_df.columns]
     display_df = history_df[available].tail(10).copy()
     display_df["storm_probability"] = (display_df["storm_probability"] * 100).round(1).astype(str) + "%"
     display_df["confidence_score"] = (display_df["confidence_score"] * 100).round(1).astype(str) + "%"
-    st.dataframe(
-        display_df.sort_values("generated_at", ascending=False),
-        use_container_width=True,
-        hide_index=True,
-    )
+    display_df = display_df.rename(columns=rename_map)
+    st.dataframe(display_df.sort_values(rename_map["generated_at"], ascending=False), use_container_width=True, hide_index=True)
 
-# ── Auto-refresh ───────────────────────────────────────────────────────────────
 if auto_refresh:
-    time.sleep(refresh_rate)
-    st.rerun()
+    time.sleep(refresh_rate); st.rerun()

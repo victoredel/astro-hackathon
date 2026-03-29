@@ -10,19 +10,17 @@ from plotly.subplots import make_subplots
 
 def build_timeseries(df: pd.DataFrame) -> go.Figure:
     """
-    Build a multi-panel time-series chart for solar wind parameters.
-
-    Expected columns: timestamp, bz_gse, speed, density, storm_probability
+    Güneş rüzgarı parametreleri için çok panelli zaman serisi grafiği oluşturur.
     """
     fig = make_subplots(
         rows=3,
         cols=1,
         shared_xaxes=True,
         vertical_spacing=0.06,
-        subplot_titles=["Bz GSE (nT)", "Solar Wind Speed (km/s)", "Density (p/cc)"],
+        subplot_titles=["Bz GSE (nT)", "Güneş Rüzgarı Hızı (km/s)", "Proton Yoğunluğu (p/cc)"],
     )
 
-    # ── Bz (most critical — negative southward = storm driver) ─────────────────
+    # ── Bz ─────────────────
     fig.add_trace(go.Scatter(
         x=df["timestamp"],
         y=df["bz_gse"],
@@ -32,45 +30,31 @@ def build_timeseries(df: pd.DataFrame) -> go.Figure:
         fillcolor="rgba(77,208,225,0.08)",
     ), row=1, col=1)
 
-    # Storm threshold line
+    # Fırtına eşiği çizgisi
     fig.add_hline(y=-10, line_dash="dash", line_color="#ff1744", opacity=0.5, row=1, col=1)
     fig.add_annotation(
-        text="Storm threshold (−10 nT)", x=df["timestamp"].iloc[-1],
+        text="Fırtına eşiği (−10 nT)", x=df["timestamp"].iloc[-1],
         y=-10, showarrow=False, font={"color": "#ff1744", "size": 10},
         xanchor="right", row=1, col=1,
     )
 
-    # ── Speed ──────────────────────────────────────────────────────────────────
+    # ── Hız ──────────────────────────────────────────────────────────────────
     fig.add_trace(go.Scatter(
         x=df["timestamp"],
         y=df["speed"],
-        name="Speed",
+        name="Hız",
         line={"color": "#ffb300", "width": 2},
     ), row=2, col=1)
 
-    # ── Density ────────────────────────────────────────────────────────────────
+    # ── Yoğunluk ────────────────────────────────────────────────────────────────
     fig.add_trace(go.Scatter(
         x=df["timestamp"],
         y=df["density"],
-        name="Density",
+        name="Yoğunluk",
         line={"color": "#ab47bc", "width": 2},
         fill="tozeroy",
         fillcolor="rgba(171,71,188,0.08)",
     ), row=3, col=1)
-
-    # ── Dynamic Y-axis bounds ───────────────────────────────────────────────────
-    bz_min = min(df["bz_gse"].min() - 5, -15)
-    bz_max = max(df["bz_gse"].max() + 5, 15)
-
-    speed_min = min(df["speed"].min() - 20, 300)
-    speed_max = max(df["speed"].max() + 20, 700)
-
-    density_min = 0
-    density_max = max(df["density"].max() + 5, 20)
-
-    fig.update_yaxes(range=[bz_min, bz_max], row=1, col=1)
-    fig.update_yaxes(range=[speed_min, speed_max], row=2, col=1)
-    fig.update_yaxes(range=[density_min, density_max], row=3, col=1)
 
     fig.update_layout(
         paper_bgcolor="rgba(13,17,35,0)",

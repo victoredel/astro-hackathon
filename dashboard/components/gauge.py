@@ -60,7 +60,7 @@ def build_gauge(probability: float, alert_level: str, confidence: float) -> go.F
             },
         },
         title={
-            "text": f"Storm Probability<br><span style='font-size:0.75em;color:#8892a4'>Confidence: {confidence*100:.0f}%</span>",
+            "text": f"Fırtına Olasılığı<br><span style='font-size:0.75em;color:#8892a4'>Güven Skoru: {confidence*100:.0f}%</span>",
             "font": {"size": 20, "color": "#e0e8ff"},
         },
     ))
