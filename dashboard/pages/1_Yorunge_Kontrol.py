@@ -4,70 +4,117 @@ import json
 import requests
 import os
 
-# --- Importamos la predicción directamente desde el Backend ---
 try:
     from pipeline.orbital_collision import calculate_orbital_risk
 except ImportError:
     calculate_orbital_risk = None
 
 st.set_page_config(page_title="Yörünge Kontrol", page_icon="🛰️", layout="wide")
-st.title("🛰️ TUA Küresel Yörünge Takip ve Çarpışma Tahmini (Canlı Veri)")
+st.title("🛰️ TUA Küresel Yörünge Takip ve Çarpışma Tahmini")
 
 @st.cache_resource
-def load_js_libs():
-    sources = {
-        "globe": ["https://cdn.jsdelivr.net/npm/globe.gl/dist/globe.gl.min.js", "https://unpkg.com/globe.gl"],
-        "satellite": ["https://cdn.jsdelivr.net/npm/satellite.js/dist/satellite.min.js", "https://unpkg.com/satellite.js/dist/satellite.min.js"]
-    }
-    content = {}
-    for name, urls in sources.items():
-        content[name] = ""
-        for url in urls:
-            try:
-                r = requests.get(url, timeout=5)
-                if r.status_code == 200 and not r.text.strip().startswith("<"):
-                    content[name] = r.text
-                    break
-            except: pass
-    return content
-
-js_libs = load_js_libs()
-
-# --- NUEVAS FUENTES DE DATOS (SIN AUTORIZACIÓN NI BLOQUEOS) ---
-@st.cache_data(ttl=3600)
-def get_raw_tles():
-    urls = {
-        # AMSAT: Servidor libre de radioaficionados (Satélites activos)
-        "active": "https://www.amsat.org/tle/current/nasabare.txt",
-        # CELESTRAK (.com y .txt): Archivo de texto estático, evade el firewall del .org/php
-        "debris": "https://celestrak.com/NORAD/elements/cosmos-2251-debris.txt"
-    }
-    data = []
-    headers = {"User-Agent": "Mozilla/5.0"}
-    for cat, url in urls.items():
-        try:
-            r = requests.get(url, headers=headers, timeout=8)
-            if r.status_code == 200:
-                lines = r.text.strip().splitlines()
-                # Extraemos un máximo de 300 objetos por categoría para mantener los 60 FPS
-                for i in range(0, min(len(lines), 900), 3):
-                    if i+2 < len(lines):
-                        data.append({"n": lines[i].strip(), "l1": lines[i+1].strip(), "l2": lines[i+2].strip(), "t": cat})
-        except: pass
+def load_assets():
+    assets = {"globe": "", "satellite": "", "geojson": "{}"}
     
-    return data
+    # 1. Librerías JS
+    for url in ["https://cdn.jsdelivr.net/npm/globe.gl/dist/globe.gl.min.js", "https://unpkg.com/globe.gl"]:
+        try:
+            r = requests.get(url, timeout=5)
+            if r.status_code == 200 and not r.text.strip().startswith("<"):
+                assets["globe"] = r.text
+                break
+        except: pass
+        
+    for url in ["https://cdn.jsdelivr.net/npm/satellite.js/dist/satellite.min.js", "https://unpkg.com/satellite.js/dist/satellite.min.js"]:
+        try:
+            r = requests.get(url, timeout=5)
+            if r.status_code == 200 and not r.text.strip().startswith("<"):
+                assets["satellite"] = r.text
+                break
+        except: pass
 
-tle_payload = get_raw_tles()
+    # 2. Mapa de Países 
+    try:
+        r = requests.get("https://raw.githubusercontent.com/johan/world.geo.json/master/countries.geo.json", timeout=5)
+        if r.status_code == 200:
+            assets["geojson"] = r.text
+    except: pass
+
+    return assets
+
+assets = load_assets()
+
+# --- NUEVAS FUENTES ABIERTAS (SIN AUTORIZACIÓN) ---
+@st.cache_data(ttl=3600)
+def get_space_data():
+    data = []
+    error_log = ""
+    
+    api_key = os.getenv("SATNOGS_API_KEY")
+    if not api_key:
+        error_log = "Falta SATNOGS_API_KEY en el .env"
+        st.error(error_log)
+        return data, error_log
+        
+    headers = {"Authorization": f"Token {api_key}"}
+    
+    try:
+        r = requests.get("https://db.satnogs.org/api/tle/?format=json", headers=headers, timeout=10)
+        if r.status_code == 200:
+            payload = r.json()
+            if isinstance(payload, list) and len(payload) > 0:
+                # Tomar los primeros 300 como 'active'
+                for item in payload[:300]:
+                    n = item.get("tle0", "UNKNOWN").replace("0 ", "")
+                    l1 = item.get("tle1", "")
+                    l2 = item.get("tle2", "")
+                    if l1 and l2:
+                        data.append({"n": n, "l1": l1, "l2": l2, "t": "active"})
+                
+                # Tomar los últimos 300 como 'debris' simulado (satélites inactivos antiguos)
+                for item in payload[-300:]:
+                    n = item.get("tle0", "UNKNOWN").replace("0 ", "")
+                    l1 = item.get("tle1", "")
+                    l2 = item.get("tle2", "")
+                    if l1 and l2:
+                        data.append({"n": "DEB_SIM_" + n, "l1": l1, "l2": l2, "t": "debris"})
+            else:
+                error_log += "SatNOGS devolvió un JSON vacío o no válido.\n"
+        else:
+            error_log += f"SatNOGS falló [{r.status_code}]: {r.text[:150]}\n"
+    except Exception as e:
+        error_log += f"SatNOGS EXC: {str(e)[:150]}\n"
+
+    if error_log:
+        st.error(error_log)
+
+    return data, error_log
+
+tle_payload, telemetry_errors = get_space_data()
 
 st.sidebar.header("🌞 Uzay Havası")
 storm_prob = st.sidebar.slider("Güneş Fırtınası Olasılığı (%)", 0, 100, 25)
 
-# --- EJECUCIÓN DEL CEREBRO DE COLISIÓN (INSTANTÁNEO, SIN TIMEOUT) ---
+# Diagnóstico local
+active_count = len([d for d in tle_payload if d["t"] == "active"])
+debris_count = len([d for d in tle_payload if d["t"] == "debris"])
+
+st.sidebar.markdown("### 📡 Telemetría de Navegación")
+st.sidebar.info(f"✅ Satélites Activos: {active_count}")
+if debris_count > 0:
+    st.sidebar.info(f"☄️ Basura Orbital: {debris_count}")
+else:
+    st.sidebar.error("⚠️ Cero Basura Orbital descargada.")
+
+if telemetry_errors:
+    st.sidebar.error(f"🛑 Error Log HTTP:\\n{telemetry_errors}")
+
 is_danger = False
 radar_message = "SCANNING: ORBIT CLEAR"
 
+# --- CÁLCULO DE COLISIÓN LOCAL (0 Latencia) ---
 if calculate_orbital_risk:
-    with st.spinner("🧠 Radar Taraması Aktif (Backend hesaplıyor)..."):
+    with st.spinner("🧠 Radar Taraması Aktif..."):
         try:
             risk_data = calculate_orbital_risk(storm_prob=storm_prob)
             is_danger = risk_data.get("is_danger", False)
@@ -79,13 +126,10 @@ if calculate_orbital_risk:
                 radar_message = f"DANGER: IMPACT DETECTED IN {dist_m}m!"
             else:
                 st.success(f"✅ GÜVENLİ: Minimum yaklaşma mesafesi {dist_m}m.")
-                radar_message = "SCANNING: ORBIT CLEAR"
         except Exception as e:
             st.error(f"Hesaplama hatası: {e}")
-else:
-    st.warning("⚠️ API modülü bulunamadı. Lütfen backend dosyalarını kontrol edin.")
 
-# --- HTML DEL GLOBO ---
+# --- HTML DEL GLOBO (Aislado de internet en el cliente) ---
 template_html = '''
 <!DOCTYPE html>
 <html>
@@ -105,11 +149,12 @@ template_html = '''
 
     <script>
         try {
-            if (typeof Globe === 'undefined') throw new Error("Globe.gl kütüphanesi yüklenemedi.");
-            if (typeof satellite === 'undefined') throw new Error("satellite.js kütüphanesi yüklenemedi.");
-
             const rawData = __DATA__;
+            console.log("Datos totales:", rawData.length);
+            console.log("Debris vivos en front:", rawData.filter(d => d.t === 'debris').length);
+            let firstDebrisLogged = false;
             const isDanger = __IS_DANGER__;
+            const geoJsonData = __GEOJSON__;
             const satLib = satellite;
 
             const timeMultiplier = 60; 
@@ -122,19 +167,16 @@ template_html = '''
                 .pointRadius(0.8)
                 .pointColor(d => d.t === 'active' ? '#00ffcc' : (isDanger ? '#ff0000' : '#ff9900'))
                 .pointAltitude(d => d.alt || 0.1)
+                .pointsTransitionDuration(0)
                 .width(window.innerWidth)
                 .height(800);
 
-            try { world.globeColor('#051124'); } catch(e) {}
-
-            fetch('https://unpkg.com/three-globe/example/img/world-110m.geojson')
-                .then(res => res.json())
-                .then(countries => {
-                    world.hexPolygonsData(countries.features)
-                         .hexPolygonResolution(3)
-                         .hexPolygonMargin(0.1)
-                         .hexPolygonColor(() => 'rgba(0, 255, 204, 0.3)');
-                }).catch(() => {});
+            if (geoJsonData && geoJsonData.features) {
+                world.hexPolygonsData(geoJsonData.features)
+                     .hexPolygonResolution(3)
+                     .hexPolygonMargin(0.1)
+                     .hexPolygonColor(() => 'rgba(0, 255, 204, 0.3)');
+            }
 
             const satData = rawData.map(d => {
                 try { return { ...d, satrec: satLib.twoline2satrec(d.l1, d.l2) }; } 
@@ -156,6 +198,11 @@ template_html = '''
                             let alt = posGeo.height / 6371;
                             if (isDanger && d.t === 'debris') alt *= 0.95; 
 
+                            if (d.t === 'debris' && !firstDebrisLogged) {
+                                console.log(`Primer debris prop. -> alt=${alt.toFixed(4)}, lat=${satLib.degreesLat(posGeo.latitude).toFixed(4)}, lng=${satLib.degreesLong(posGeo.longitude).toFixed(4)}`);
+                                firstDebrisLogged = true;
+                            }
+
                             return {
                                 lat: satLib.degreesLat(posGeo.latitude),
                                 lng: satLib.degreesLong(posGeo.longitude),
@@ -175,7 +222,6 @@ template_html = '''
             window.onresize = () => world.width(window.innerWidth).height(800);
 
         } catch(e) {
-            document.getElementById('ui').classList.add('danger');
             document.getElementById('ui').innerHTML = "❌ JS ERROR: " + e.message;
         }
     </script>
@@ -183,9 +229,9 @@ template_html = '''
 </html>
 '''
 
-# Reemplazos limpios
-html_final = template_html.replace("__SATELLITE_JS__", js_libs['satellite'])
-html_final = html_final.replace("__GLOBE_JS__", js_libs['globe'])
+html_final = template_html.replace("__SATELLITE_JS__", assets['satellite'])
+html_final = html_final.replace("__GLOBE_JS__", assets['globe'])
+html_final = html_final.replace("__GEOJSON__", assets['geojson'])
 html_final = html_final.replace("__DATA__", json.dumps(tle_payload))
 html_final = html_final.replace("__IS_DANGER__", str(is_danger).lower())
 html_final = html_final.replace("__DANGER_CLASS__", "danger" if is_danger else "")
