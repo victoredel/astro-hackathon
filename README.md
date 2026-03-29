@@ -42,7 +42,6 @@ The project is built on a microservices architecture orchestrated with Docker Co
     NASA_API_KEY=your_api_key_here
     DATABASE_URL=sqlite+aiosqlite:///./data/solar.db
     API_BASE_URL=http://api:8000
-    SATNOGS_API_KEY=your_satnogs_token_here
     ```
 
 3.  **Run with Docker:**
