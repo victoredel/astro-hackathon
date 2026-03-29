@@ -361,40 +361,60 @@ st.markdown("---")
 st.subheader("🪐 Derin Uzay İletişim Protokolü (Deep Space LDPC)")
 st.caption("Yapay zeka tahminlerine dayalı otonom veri sıkıştırma ve hata düzeltme (FEC) simülasyonu.")
 
+# 1. CREAMOS UNA CAJA RESERVADA PARA EVITAR QUE LA UI SALTE
+result_placeholder = st.empty()
+
 if st.button("🚀 Mars Yüzeyinden Veri İletimini Simüle Et"):
     st.session_state.ldpc_sim_result = None
-    anim_text = st.empty()
-    progress_bar = st.progress(0)
-    anim_text.info("🛰️ **Adım 1:** Mars Rover verisi hazırlanıyor... (Veri boyutu: 240 bit / 1.0 MB Payload)")
-    for percent in range(1, 35):
-        progress_bar.progress(percent); time.sleep(0.02)
-    anim_text.warning("⚠️ **Adım 2: UYARI!** Güneş radyasyonu sinyale çarptı. İyonosferik parazit nedeniyle bitler bozuluyor (Bit-Flipping)...")
-    for percent in range(35, 75):
-        progress_bar.progress(percent); time.sleep(0.04) 
-    anim_text.error("🧮 **Adım 3:** Sinyal kritik hasar aldı! Bilişsel LDPC onarım algoritması devreye giriyor...")
-    st.session_state.ldpc_sim_result = simulate_deep_space_transmission(current_prob)
-    for percent in range(75, 101):
-        progress_bar.progress(percent); time.sleep(0.02)
-    anim_text.empty(); progress_bar.empty()
+    
+    # 2. METEMOS LA ANIMACIÓN DENTRO DE LA CAJA RESERVADA
+    with result_placeholder.container():
+        anim_text = st.empty()
+        progress_bar = st.progress(0)
+        
+        anim_text.info("🛰️ **Adım 1:** Mars Rover verisi hazırlanıyor... (Veri boyutu: 1.0 MB Payload)")
+        for percent in range(1, 35):
+            progress_bar.progress(percent)
+            time.sleep(0.01) # Más rápido para no chocar con el auto-refresh
+            
+        anim_text.warning("⚠️ **Adım 2: UYARI!** Güneş radyasyonu sinyale çarptı. İyonosferik parazit nedeniyle bitler bozuluyor...")
+        for percent in range(35, 75):
+            progress_bar.progress(percent)
+            time.sleep(0.02)
+            
+        anim_text.error("🧮 **Adım 3:** Sinyal kritik hasar aldı! Bilişsel LDPC onarım algoritması devreye giriyor...")
+        
+        # Ejecutamos la matemática
+        st.session_state.ldpc_sim_result = simulate_deep_space_transmission(current_prob)
+        
+        for percent in range(75, 101):
+            progress_bar.progress(percent)
+            time.sleep(0.01)
+            
+        anim_text.empty()
+        progress_bar.empty()
 
+# 3. MOSTRAMOS EL RESULTADO EN LA MISMA CAJA RESERVADA
 if st.session_state.ldpc_sim_result:
     result = st.session_state.ldpc_sim_result
-    if 'error' in result:
-        st.error(f"Simülasyon Hatası: {result['error']}")
-    else:
-        st.markdown(f"#### {result['icon']} **İletim Raporu (1 MB Payload)**")
-        cols = st.columns(5)
-        cols[0].metric("Çalışma Modu", result['mode'].split(' ')[0])
-        cols[1].metric("Etkili Hız", f"{result['effective_speed_mbps']} Mbps")
-        cols[2].metric("Veri Oranı", f"%{result['data_ratio_pct']}")
-        cols[3].metric("Radyasyon Hasarı", f"{result['extrapolated_corrupted']:,} bit")
-        cols[4].metric("Kurtarma Oranı", f"%{result['success_rate']:.1f}")
-        
-        if result['recovered_100_percent']:
-            shield_pct = 100 - result['data_ratio_pct']
-            st.success(f"✅ **GÖREV BAŞARILI:** Yapay zeka %{shield_pct} yedeklilik zırhı kullanarak radyasyon gürültüsünü yendi. Bozulan **{result['extrapolated_corrupted']:,} bit** kayıpsız onarıldı.")
+    
+    with result_placeholder.container():
+        if 'error' in result:
+            st.error(f"Simülasyon Hatası: {result['error']}")
         else:
-            st.warning(f"⚠️ **KISMİ KAYIP:** Fırtına çok şiddetliydi. Hız feda edilerek verinin büyük kısmı kurtarıldı.")
+            st.markdown(f"#### {result['icon']} **İletim Raporu (1 MB Payload)**")
+            cols = st.columns(5)
+            cols[0].metric("Çalışma Modu", result['mode'].split(' ')[0])
+            cols[1].metric("Etkili Hız", f"{result['effective_speed_mbps']} Mbps")
+            cols[2].metric("Veri Oranı", f"%{result['data_ratio_pct']}")
+            cols[3].metric("Radyasyon Hasarı", f"{result['extrapolated_corrupted']:,} bit")
+            cols[4].metric("Kurtarma Oranı", f"%{result['success_rate']:.1f}")
+            
+            if result['recovered_100_percent']:
+                shield_pct = 100 - result['data_ratio_pct']
+                st.success(f"✅ **GÖREV BAŞARILI:** Yapay zeka %{shield_pct} yedeklilik zırhı kullanarak radyasyon gürültüsünü yendi. Bozulan **{result['extrapolated_corrupted']:,} bit** kayıpsız onarıldı.")
+            else:
+                st.warning(f"⚠️ **KISMİ KAYIP:** Fırtına çok şiddetliydi. Hız feda edilerek verinin büyük kısmı kurtarıldı.")
 # ── TEİAŞ GIC Risk Motoru ──────────────────────────────────────────────────────
 st.markdown("---")
 st.subheader("⚡ Kritik Altyapı Koruma (Terrestrial GIC Risk Engine)")
