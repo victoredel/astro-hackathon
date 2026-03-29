@@ -382,17 +382,19 @@ if st.session_state.ldpc_sim_result:
     if 'error' in result:
         st.error(f"Simülasyon Hatası: {result['error']}")
     else:
-        st.markdown("#### 📡 **İletim Raporu**")
-        cols = st.columns(4)
-        cols[0].metric("İletim Modu", result['mode'])
-        cols[1].metric("Kanal Gürültüsü (SNR)", f"{result['snr']} dB")
-        cols[2].metric("Radyasyon Hasarı", f"{result['corrupted_bits']} bit")
-        cols[3].metric("Kurtarma Oranı", f"%{result['success_rate']:.1f}")
+        st.markdown(f"#### {result['icon']} **İletim Raporu (1 MB Payload)**")
+        cols = st.columns(5)
+        cols[0].metric("Çalışma Modu", result['mode'].split(' ')[0])
+        cols[1].metric("Etkili Hız", f"{result['effective_speed_mbps']} Mbps")
+        cols[2].metric("Veri Oranı", f"%{result['data_ratio_pct']}")
+        cols[3].metric("Radyasyon Hasarı", f"{result['extrapolated_corrupted']:,} bit")
+        cols[4].metric("Kurtarma Oranı", f"%{result['success_rate']:.1f}")
+        
         if result['recovered_100_percent']:
-            st.success(f"✅ **GÖREV BAŞARILI:** Yapay zeka modülasyonu radyasyon gürültüsünü yendi. Bozulan **{result['corrupted_bits']} bit** %100 oranında kurtarıldı.")
+            shield_pct = 100 - result['data_ratio_pct']
+            st.success(f"✅ **GÖREV BAŞARILI:** Yapay zeka %{shield_pct} yedeklilik zırhı kullanarak radyasyon gürültüsünü yendi. Bozulan **{result['extrapolated_corrupted']:,} bit** kayıpsız onarıldı.")
         else:
-            st.warning(f"⚠️ **KISMİ KAYIP:** Fırtına çok şiddetliydi, ancak LDPC algoritması hataların çoğunu onarmayı başardı.")
-
+            st.warning(f"⚠️ **KISMİ KAYIP:** Fırtına çok şiddetliydi. Hız feda edilerek verinin büyük kısmı kurtarıldı.")
 # ── TEİAŞ GIC Risk Motoru ──────────────────────────────────────────────────────
 st.markdown("---")
 st.subheader("⚡ Kritik Altyapı Koruma (Terrestrial GIC Risk Engine)")
