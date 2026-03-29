@@ -502,20 +502,6 @@ with col_anim:
 
 st.divider()
 
-# ── TUA Yörünge ve Uzay Çöpü Kontrol Merkezi ──────────────────────────────────
-st.subheader("🛰️ TUA Yörünge ve Uzay Çöpü Kontrol Merkezi")
-st.caption("Uzay çöpleri (Space Debris) takip ve çarpışma önleme simülatörü. Fırtına kaynaklı atmosferik sürüklenme (Drag) etkilerini 3 boyutlu küre üzerinde analiz edin.")
-
-col_info, col_btn = st.columns([3, 1])
-with col_info:
-    st.info("💡 **YENİ MODÜL:** İMECE uydusu ve uzay çöpleri arasındaki yörünge kesişimlerini canlı 3D haritada izlemek için Kontrol Merkezine geçiş yapın.")
-with col_btn:
-    # Botón nativo de Streamlit que ejecuta la función switch_page
-    if st.button("🚀 Kontrol Merkezini Aç", type="primary", use_container_width=True):
-        st.switch_page("pages/1_Yorunge_Kontrol.py")
-
-st.divider()
-
 # ╔══════════════════════════════════════════════════════════════════════════════╗
 # ║  ROW 2 — THE FORECAST (Cone left · Heatmap right)                           ║
 # ╚══════════════════════════════════════════════════════════════════════════════╝

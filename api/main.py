@@ -25,7 +25,6 @@ from api.routers import ingest as ingest_router
 from api.routers import predict as predict_router
 from api.routers import telemetry as telemetry_router
 from api.routers import ws as ws_router
-from api.routers import orbital as orbital_router
 from config import get_settings
 from db.database import init_db
 
@@ -90,7 +89,6 @@ app.include_router(predict_router.router)
 app.include_router(telemetry_router.router)
 app.include_router(donki_router.router)
 app.include_router(ws_router.router)
-app.include_router(orbital_router.router)
 
 
 @app.get("/health", tags=["system"])

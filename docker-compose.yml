@@ -59,7 +59,6 @@ services:
       - .:/app
     environment:
       - API_BASE_URL=http://api:8000
-      - SATNOGS_API_KEY=${SATNOGS_API_KEY}
 
 volumes:
   data:
